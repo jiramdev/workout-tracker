@@ -4,47 +4,47 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { SlidersHorizontal, ArrowRight, Dumbbell } from "lucide-react";
+import { Calendar, ArrowUpRight, Check, Dumbbell } from "lucide-react";
 
 export default async function HomePage() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) redirect("/login");
 
   const now = new Date();
-  const todayIndex = now.getDay();
-  const currentYear = now.getFullYear();
+  const currentDayOfWeek = now.getDay(); // 0 = Zo, 1 = Ma...
   const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
 
-  const monthShort = [
-    "Jan",
-    "Feb",
-    "Mar",
-    "Apr",
-    "May",
-    "Jun",
-    "Jul",
-    "Aug",
-    "Sep",
-    "Oct",
-    "Nov",
-    "Dec",
+  const dayNamesNL = [
+    "ZONDAG",
+    "MAANDAG",
+    "DINSDAG",
+    "WOENSDAG",
+    "DONDERDAG",
+    "VRIJDAG",
+    "ZATERDAG",
   ];
 
-  const dayNames = [
-    "Sunday",
-    "Monday",
-    "Tuesday",
-    "Wednesday",
-    "Thursday",
-    "Friday",
-    "Saturday",
+  const monthNamesNL = [
+    "januari",
+    "februari",
+    "maart",
+    "april",
+    "mei",
+    "juni",
+    "juli",
+    "augustus",
+    "september",
+    "oktober",
+    "november",
+    "december",
   ];
 
   // 1. Plan van vandaag
   const scheduleDay = await prisma.scheduleDay.findFirst({
     where: {
       schedule: { userId: session.user.id },
-      dayOfWeek: todayIndex,
+      dayOfWeek: currentDayOfWeek,
     },
     include: {
       plan: {
@@ -55,47 +55,29 @@ export default async function HomePage() {
 
   const todayPlan = scheduleDay?.plan;
 
-  // 2. Laatste lichaamsgewicht
+  // 2. Lichaamsgewicht
   const latestWeight = await prisma.bodyWeightLog.findFirst({
     where: { userId: session.user.id },
     orderBy: { loggedAt: "desc" },
   });
 
-  let weightTimeAgo = "Geen meting";
-  if (latestWeight) {
-    const diffMin = Math.floor(
-      (now.getTime() - new Date(latestWeight.loggedAt).getTime()) / (1000 * 60)
-    );
-    if (diffMin < 60) weightTimeAgo = `${Math.max(1, diffMin)} min ago`;
-    else if (diffMin < 1440) weightTimeAgo = `${Math.floor(diffMin / 60)}h ago`;
-    else weightTimeAgo = `${Math.floor(diffMin / 1440)}d ago`;
-  }
-
-  // 3. Maanddata & unieke trainingsdagen
+  // 3. Maandstatistieken (aantal getrainde dagen)
   const startOfMonth = new Date(currentYear, currentMonth, 1);
-  const endOfMonth = new Date(currentYear, currentMonth + 1, 0);
-  const daysInCurrentMonth = endOfMonth.getDate();
-
   const monthlyLogs = await prisma.workoutLog.findMany({
     where: {
       userId: session.user.id,
-      completedAt: {
-        gte: startOfMonth,
-        lte: endOfMonth,
-      },
+      completedAt: { gte: startOfMonth },
     },
-    select: { completedAt: true },
+    include: { entries: true },
   });
 
-  const trainedDaysSet = new Set(
+  const trainedDaysCount = new Set(
     monthlyLogs
       .filter((l) => l.completedAt)
       .map((l) => new Date(l.completedAt!).getDate())
-  );
+  ).size;
 
-  const trainedDaysCount = trainedDaysSet.size;
-
-  // 4. Afgelopen 3 workouts ophalen
+  // 4. Afgelopen 3 trainingen
   const pastWorkouts = await prisma.workoutLog.findMany({
     where: {
       userId: session.user.id,
@@ -110,146 +92,96 @@ export default async function HomePage() {
   });
 
   return (
-    <div className="min-h-screen bg-black text-white pb-32 pt-8 select-none">
-      <main className="max-w-md mx-auto px-5 space-y-4">
-        {/* Header zonder + knoppen */}
-        <header className="flex justify-between items-center pt-2 pb-1">
-          <h1 className="text-[34px] font-bold tracking-tight text-white">
-            Workouts
-          </h1>
+    <div className="min-h-screen bg-[#baa3d0] text-white pb-32 pt-4 px-4 select-none">
+      <main className="max-w-sm mx-auto space-y-3.5">
+        
+        {/* Top Minimalistic Navigation */}
+        <header className="flex justify-between items-center px-1 py-1">
           <Link
             href="/schedule"
-            className="w-10 h-10 rounded-full bg-[#1c1c1e] flex items-center justify-center text-white hover:bg-[#2c2c2e] transition apple-press"
+            className="w-10 h-10 rounded-full bg-[#141416] border border-white/[0.08] flex items-center justify-center text-[#a1a1aa] hover:text-white transition apple-press"
           >
-            <SlidersHorizontal className="w-4 h-4 stroke-[1.75]" />
+            <Calendar className="w-4 h-4 stroke-[1.8]" />
+          </Link>
+
+          <span className="text-[12px] font-semibold tracking-widest text-[#141416] uppercase bg-white/30 backdrop-blur-md px-4 py-1.5 rounded-full">
+            Workout Tracker
+          </span>
+
+          <Link
+            href="/weight/log"
+            className="w-10 h-10 rounded-full bg-[#141416] border border-white/[0.08] flex items-center justify-center text-[#baa3d0] font-mono text-[12px] font-bold transition apple-press"
+          >
+            {latestWeight ? Math.round(latestWeight.weight) : "--"}
           </Link>
         </header>
 
-        {/* 1. Full-Width Workout van de Dag Widget */}
+        {/* 1. HERO WORKOUT CARD: Grote Gecentreerde Typografie */}
         <Link
           href={todayPlan ? `/workout/active?planId=${todayPlan.id}` : "/schedule"}
-          className="group block bg-[#1c1c1e] rounded-[26px] p-5 border border-white/[0.04] apple-press"
+          className="block bg-[#141416] border border-white/[0.08] rounded-[34px] px-6 py-9 text-center space-y-3 relative overflow-hidden shadow-[0_16px_36px_rgba(0,0,0,0.25)] transition apple-press group"
         >
-          <div className="flex justify-between items-start">
-            <div className="flex items-center gap-3.5">
-              <div className="w-11 h-11 rounded-full border border-white/20 flex items-center justify-center relative">
-                <span className="font-mono text-sm font-semibold text-white">
-                  1
-                </span>
-                {todayPlan && (
-                  <div className="absolute inset-0 rounded-full border-t-2 border-[#2997ff]" />
-                )}
-              </div>
-              <div>
-                <span className="text-[12px] font-medium text-[#8e8e93] uppercase tracking-wider block">
-                  {dayNames[todayIndex]}
-                </span>
-                <h2 className="text-[19px] font-bold text-white tracking-tight leading-snug">
-                  {todayPlan ? todayPlan.name : "Rest Day"}
-                </h2>
-              </div>
-            </div>
+          {/* Dagindicator gecentreerd */}
+          <p className="text-[12px] font-semibold tracking-[0.2em] text-[#baa3d0] uppercase">
+            {dayNamesNL[currentDayOfWeek]}
+          </p>
 
-            <div className="w-9 h-9 rounded-full bg-[#2c2c2e]/60 flex items-center justify-center text-[#8e8e93] group-hover:text-white transition">
-              <ArrowRight className="w-4 h-4 stroke-[1.75]" />
-            </div>
-          </div>
+          {/* Enorme Workout Titel */}
+          <h1 className="text-[52px] sm:text-[58px] font-editorial tracking-tight text-white leading-none">
+            {todayPlan ? todayPlan.name : "REST DAY"}
+          </h1>
 
-          <div className="flex items-center justify-between pt-3.5 mt-3.5 border-t border-white/[0.06] text-[13px] text-[#8e8e93]">
-            <span>
-              {todayPlan
-                ? `${todayPlan.exercises.length} oefeningen gereed`
-                : "Geen training ingepland"}
-            </span>
-            <span className="text-[#2997ff] font-medium">
-              {todayPlan ? "Start sessie" : "Kies plan"}
-            </span>
-          </div>
+          {/* Aantal oefeningen gecentreerd onder de titel */}
+          <p className="text-[14px] text-[#a1a1aa] font-medium tracking-tight">
+            {todayPlan
+              ? `${todayPlan.exercises.length} oefeningen ingepland`
+              : "Geen training ingeroosterd"}
+          </p>
         </Link>
 
-        {/* 2. Twee Halve Pagina Widgets in Exact Dezelfde Kaartstijl */}
-        <div className="grid grid-cols-2 gap-3.5">
-          {/* Halve widget links: Consistentie & Maand Dots */}
-          <div className="bg-[#1c1c1e] rounded-[26px] p-5 flex flex-col justify-between aspect-square border border-white/[0.04]">
-            <div className="flex justify-between items-start">
-              <span className="text-[12px] font-medium text-[#8e8e93] uppercase tracking-wider">
-                {monthShort[currentMonth]}
-              </span>
-              <SlidersHorizontal className="w-4 h-4 text-[#8e8e93]" />
-            </div>
-
-            {/* Dots matrix */}
-            <div className="grid grid-flow-col grid-rows-4 gap-x-2.5 gap-y-2 py-1 w-fit">
-              {Array.from({ length: daysInCurrentMonth }).map((_, i) => {
-                const dayNum = i + 1;
-                const hasTrained = trainedDaysSet.has(dayNum);
-
-                return (
-                  <span
-                    key={dayNum}
-                    className={`w-1.5 h-1.5 rounded-full transition-all ${
-                      hasTrained
-                        ? "bg-white shadow-[0_0_5px_rgba(255,255,255,0.7)]"
-                        : "bg-[#2c2c2e]"
-                    }`}
-                  />
-                );
-              })}
-            </div>
-
-            {/* Consistentie info met badge */}
-            <div className="flex items-center gap-2.5 pt-2.5 border-t border-white/[0.06]">
-              <div className="w-7 h-7 rounded-full border border-white/20 flex items-center justify-center font-mono text-[11px] text-white">
-                {trainedDaysCount}
-              </div>
-              <div>
-                <p className="text-[13px] font-semibold text-white tracking-tight leading-none">
-                  {trainedDaysCount === 1 ? "1 Day" : `${trainedDaysCount} Days`}
-                </p>
-                <p className="text-[10px] text-[#8e8e93] mt-0.5">consistency</p>
-              </div>
-            </div>
+        {/* 2. STATS & CONTEXT CARD: Gecentreerde Editorial Paragraaf */}
+        <div className="bg-[#141416] border border-white/[0.08] rounded-[34px] p-7 text-center space-y-4 shadow-[0_16px_36px_rgba(0,0,0,0.25)]">
+          {/* Subtiele badge row gecentreerd */}
+          <div className="flex justify-center items-center gap-2 text-[11px] font-mono uppercase tracking-wider text-[#baa3d0]">
+            <span>{monthNamesNL[currentMonth]}</span>
+            <span>•</span>
+            <span>{trainedDaysCount} Dagen Actief</span>
           </div>
 
-          {/* Halve widget rechts: Lichaamsgewicht */}
-          <Link
-            href="/weight/log"
-            className="group bg-[#1c1c1e] rounded-[26px] p-5 flex flex-col justify-between aspect-square border border-white/[0.04] apple-press"
-          >
-            <div className="flex justify-end items-start">
-              <SlidersHorizontal className="w-4 h-4 text-[#8e8e93]" />
-            </div>
-
-            <div>
-              <div className="flex items-baseline gap-1">
-                <span className="text-[32px] font-semibold tracking-tight text-white leading-none">
-                  {latestWeight ? latestWeight.weight : "--"}
-                </span>
-                <span className="text-[13px] text-[#8e8e93] font-normal">kg</span>
-              </div>
-              <p className="text-[14px] font-medium text-white mt-2">Body Weight</p>
-              <p className="text-[11px] text-[#8e8e93]">{weightTimeAgo}</p>
-            </div>
-          </Link>
+          {/* Gecentreerde typografische statement paragraaf */}
+          <p className="text-[17px] font-medium leading-[1.45] text-[#d4d4d8] tracking-tight">
+            Je weegt momenteel{" "}
+            <span className="text-white font-bold underline decoration-[#baa3d0] underline-offset-4">
+              {latestWeight ? `${latestWeight.weight} kg` : "onbekend"}
+            </span>
+            . Deze maand heb je inmiddels{" "}
+            <span className="text-white font-bold">{trainedDaysCount} sessies</span>{" "}
+            voltooid. Blijf consistent bouwen aan je progressieve overload.
+          </p>
         </div>
 
-        {/* 3. Past Workouts Balken */}
-        <section className="pt-2 space-y-3">
-          <div className="flex justify-between items-center px-1">
-            <h3 className="text-[15px] font-semibold text-[#8e8e93] uppercase tracking-wider">
-              Past Workouts
-            </h3>
-            <span className="text-[12px] text-[#8e8e93]">Laatste 3</span>
+        {/* 3. RECENTE SESSIES: Witte Contrast Kaart (zoals onderin de mock-up) */}
+        <section className="bg-white text-black rounded-[34px] p-6 space-y-4 shadow-[0_16px_40px_rgba(0,0,0,0.2)]">
+          <div className="flex justify-between items-center border-b border-black/[0.06] pb-3">
+            <div>
+              <h2 className="text-[18px] font-bold text-black tracking-tight leading-none">
+                Afgelopen Trainingen
+              </h2>
+              <p className="text-[12px] text-[#71717a] mt-1">
+                Laatste {pastWorkouts.length} voltooide sessies
+              </p>
+            </div>
+            <span className="w-2 h-2 rounded-full bg-[#baa3d0]" />
           </div>
 
-          {pastWorkouts.length === 0 ? (
-            <div className="bg-[#1c1c1e] rounded-[22px] p-5 text-center text-[13px] text-[#8e8e93] border border-white/[0.04]">
-              Nog geen voltooide workouts gelogd.
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {pastWorkouts.map((workout) => {
-                const workoutDate = workout.completedAt
+          <div className="space-y-2.5">
+            {pastWorkouts.length === 0 ? (
+              <p className="text-center py-4 text-[13px] text-[#71717a]">
+                Nog geen afgeronde trainingen gelogd.
+              </p>
+            ) : (
+              pastWorkouts.map((workout) => {
+                const dateStr = workout.completedAt
                   ? new Date(workout.completedAt).toLocaleDateString("nl-NL", {
                       day: "numeric",
                       month: "short",
@@ -257,7 +189,7 @@ export default async function HomePage() {
                   : "Onbekend";
 
                 const totalSets = workout.entries.length;
-                const totalWeight = workout.entries.reduce(
+                const totalKg = workout.entries.reduce(
                   (sum, e) => sum + e.weight * e.reps,
                   0
                 );
@@ -265,35 +197,32 @@ export default async function HomePage() {
                 return (
                   <div
                     key={workout.id}
-                    className="bg-[#1c1c1e] rounded-[20px] px-5 py-3.5 border border-white/[0.04] flex items-center justify-between"
+                    className="bg-[#f4f4f5] rounded-[22px] px-4 py-3.5 flex items-center justify-between"
                   >
-                    <div className="flex items-center gap-3.5">
-                      <div className="w-9 h-9 rounded-full bg-[#2c2c2e]/60 flex items-center justify-center text-[#8e8e93]">
-                        <Dumbbell className="w-4 h-4 stroke-[1.75]" />
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-[#141416] text-white flex items-center justify-center">
+                        <Check className="w-4 h-4 stroke-[2.5]" />
                       </div>
-                      <div>
-                        <p className="text-[15px] font-semibold text-white tracking-tight">
+                      <div className="text-left">
+                        <span className="font-bold text-[14px] tracking-tight block text-black">
                           {workout.plan?.name || "Vrije Workout"}
-                        </p>
-                        <p className="text-[12px] text-[#8e8e93]">
-                          {workoutDate} • {totalSets} sets
-                        </p>
+                        </span>
+                        <span className="text-[11px] text-[#71717a]">
+                          {dateStr} • {totalSets} sets
+                        </span>
                       </div>
                     </div>
 
-                    <div className="text-right">
-                      <span className="text-[14px] font-semibold text-white">
-                        {totalWeight > 0 ? `${totalWeight.toLocaleString("nl-NL")} kg` : "--"}
-                      </span>
-                    </div>
+                    <span className="font-mono text-[12px] font-semibold bg-white px-2.5 py-1 rounded-full border border-black/[0.06] text-black">
+                      {totalKg > 0 ? `${Math.round(totalKg)} kg` : "--"}
+                    </span>
                   </div>
                 );
-              })}
-            </div>
-          )}
+              })
+            )}
+          </div>
         </section>
       </main>
-
     </div>
   );
 }
