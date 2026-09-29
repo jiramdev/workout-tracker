@@ -4,7 +4,6 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import BottomBar from "@/components/BottomBar";
 import { SlidersHorizontal, ArrowRight, Dumbbell } from "lucide-react";
 
 export default async function HomePage() {
@@ -295,7 +294,6 @@ export default async function HomePage() {
         </section>
       </main>
 
-      <BottomBar />
     </div>
   );
 }
