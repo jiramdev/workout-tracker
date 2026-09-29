@@ -30,7 +30,7 @@ const INITIAL_SCHEDULE: DayPlan[] = [
     ]
   },
   {
-    dName: "Tuesday",
+    dayName: "Tuesday",
     tag: "Legs A (Quads & Calves)",
     exercises: [
       { id: "t1", name: "Hack Squat", setsReps: "3-4x 6-8", weight: "+20 kg", rest: "2.5m", done: false },
@@ -120,7 +120,7 @@ export default function Tracker() {
       return {
         ...day,
         exercises: day.exercises.map((ex) =>
-          ex.id === Id ? { ...ex, done: !ex.done } : ex
+          ex.id === exId ? { ...ex, done: !ex.done } : ex
         )
       };
     });
@@ -209,7 +209,7 @@ export default function Tracker() {
             <div className="flex items-start justify-between gap-3">
               <button
                 onClick={() => toggleExercise(ex.id)}
-                classNa="flex items-center gap-3 text-left flex-1"
+                className="flex items-center gap-3 text-left flex-1"
               >
                 <div
                   className={`w-5 h-5 rounded-md flex items-center justify-center border transition ${
