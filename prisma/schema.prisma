@@ -1,0 +1,88 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String          @id @default(cuid())
+  email        String          @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime        @default(now())
+
+  workoutPlans WorkoutPlan[]
+  schedule     WeeklySchedule?
+  workoutLogs  WorkoutLog[]
+  weightLogs   BodyWeightLog[]
+}
+
+model WorkoutPlan {
+  id        String         @id @default(cuid())
+  userId    String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  exercises PlanExercise[]
+  schedules ScheduleDay[]
+  logs      WorkoutLog[]
+}
+
+model PlanExercise {
+  id          String      @id @default(cuid())
+  planId      String
+  plan        WorkoutPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  name        String
+  targetSets  Int
+  restSeconds Int
+  order       Int         @default(0)
+}
+
+model WeeklySchedule {
+  id     String        @id @default(cuid())
+  userId String        @unique
+  user   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  days   ScheduleDay[]
+}
+
+model ScheduleDay {
+  id         String         @id @default(cuid())
+  scheduleId String
+  schedule   WeeklySchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  dayOfWeek  Int            // 0 = Zondag, 1 = Maandag ... 6 = Zaterdag
+  planId     String?
+  plan       WorkoutPlan?   @relation(fields: [planId], references: [id], onDelete: SetNull)
+
+  @@unique([scheduleId, dayOfWeek])
+}
+
+model WorkoutLog {
+  id          String        @id @default(cuid())
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId      String?
+  plan        WorkoutPlan?  @relation(fields: [planId], references: [id], onDelete: SetNull)
+  startedAt   DateTime      @default(now())
+  completedAt DateTime?
+  entries     LogEntry[]
+}
+
+model LogEntry {
+  id           String     @id @default(cuid())
+  workoutLogId String
+  workoutLog   WorkoutLog @relation(fields: [workoutLogId], references: [id], onDelete: Cascade)
+  exerciseName String
+  setNumber    Int
+  reps         Int
+  weight       Float
+}
+
+model BodyWeightLog {
+  id       String   @id @default(cuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weight   Float
+  loggedAt DateTime @default(now())
+}
