@@ -29,9 +29,9 @@ const INITIAL_SCHEDULE: DayPlan[] = [
       { id: "m5", name: "Lateral Raises", setsReps: "3x 12-15", weight: "7 kg", rest: "1m", done: false },
     ],
   },
- 
+  {
     dayName: "Tuesday",
-    tag: "Legs A (Quads & Calves)",
+  tag: "Legs A (Quads & Calves)",
     exercises: [
       { id: "t1", name: "Hack Squat", setsReps: "3-4x 6-8", weight: "+20 kg", rest: "2.5m", done: false },
       { id: "t2", name: "Leg Press", setsReps: "3x 10-12", weight: "120 kg", rest: "2m", done: false },
@@ -66,7 +66,7 @@ const INITIAL_SCHEDULE: DayPlan[] = [
       { id: "f2", name: "Leg Curl", setsReps: "3x 10-12", weight: "50 kg", rest: "90s", done: false },
       { id: "f3", name: "Bulgarian Split Squat", setsReps: "3x 8-10", weight: "BW", rest: "90s", done: false },
       { id: "f4", name: "Seated Calf Raises", setsReps: "3-4x 12-15", weight: "40 kg", rest: "1m", done: false },
-      { id: "f5", name"Hanging Leg Raises", setsReps: "3x 10-12", weight: "BW", rest: "1m", done: false },
+      { id: "f5", name: "Hanging Leg Raises", seteps: "3x 10-12", weight: "BW", rest: "1m", done: false },
       { id: "f6", name: "Dragon Flags", setsReps: "3x 5-8", weight: "BW", rest: "90s", done: false },
     ],
   },
@@ -86,7 +86,7 @@ const INITIAL_SCHEDULE: DayPlan[] = [
     dayName: "Sunday",
     tag: "Cardio & Herstel",
     exercises: [
-      { id: "su1 name: "Zone 2 Run (Easy conversational)", setsReps: "25-30 min", weight: "5 km", rest: "—", done: false },
+      { id: "su1", name: "Zone 2 Run (Easy nversational)", setsReps: "25-30 min", weight: "5 km", rest: "—", done: false },
     ],
   },
 ];
@@ -119,7 +119,8 @@ export default function Tracker() {
       if (dIdx !== selectedDayIndex) return day;
       return {
         ...day,
-        exercises: day.exercises.map((ex) =>         ex.id === exId ? { ...ex, done: !ex.done } : ex
+        exercises: day.exercises.map((ex) =>
+          ex.id === exId ? ...ex, done: !ex.done } : ex
         ),
       };
     });
@@ -208,7 +209,7 @@ export default function Tracker() {
             <div className="flex items-start justify-between gap-3">
               <button
                 onClick={() => toggleExercise(ex.id)}
-              className="flex items-center gap-3 text-left flex-1"
+                className="flex ems-center gap-3 text-left flex-1"
               >
                 <div
                   className={`w-5 h-5 rounded-md flex items-center justify-center border transition ${
@@ -234,8 +235,8 @@ export default function Tracker() {
             </div>
 
             <div className="mt-3 pl-8 flex items-center gap-2 text-xs font-mono">
-          <input
-                type="text"
+              <input
+               e="text"
                 value={ex.setsReps}
                 onChange={(e) => updateField(ex.id, "setsReps", e.target.value)}
                 className="bg-zinc-800/60 border border-zinc-700/50 rounded-md px-2 py-1 text-zinc-300 w-24 text-center focus:outline-none focus:border-zinc-500"
