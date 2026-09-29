@@ -416,11 +416,11 @@ export default function WorkoutApp() {
                 <h3 className="text-xl font-black text-white">{editingPlan.title}</h3>
               </div>
               <button
-                onClick={() => setEditingPlan(null)}
-                className="w-8 h-8 rounded-full bg-[#20221e] flex items-center justify-center text-xs font-bold text-white"
-              >
-                ✕
-              </button>
+  onClick={() => setEditingPlan(null)}
+  className="bg-[#20221e] text-white font-bold text-xs px-6 py-3 rounded-full"
+>
+  Done
+</button>
             </div>
 
             <div className="space-y-3">

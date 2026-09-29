@@ -14,11 +14,11 @@ export const TimerOverlay: React.FC<TimerOverlayProps> = ({ secondsLeft, onAddSe
 
   return (
     <aside 
-      aria-label="Rusttimer"
-      className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-[#161715] border border-[#9fe870]/40 text-white px-6 py-3.5 rounded-[24px] shadow-2xl shadow-black/80 flex items-center gap-4 animate-in fade-in"
+      aria-label="Rest Timer"
+      className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-[#161715] border border-[#232521] text-white px-5 py-3 rounded-[24px] shadow-2xl flex items-center gap-4"
     >
       <div className="flex items-center gap-2.5">
-        <div className="w-8 h-8 rounded-full bg-[#1e2e1a] text-[#9fe870] flex items-center justify-center">
+        <div className="w-8 h-8 rounded-full bg-[#1e2e1a] text-[#9fe870] flex items-center justify-center shrink-0">
           <Timer size={16} />
         </div>
         <div className="flex flex-col">
@@ -29,14 +29,16 @@ export const TimerOverlay: React.FC<TimerOverlayProps> = ({ secondsLeft, onAddSe
 
       <div className="flex items-center gap-2 border-l border-[#262824] pl-3">
         <button
+          type="button"
           onClick={() => onAddSeconds(30)}
-          className="bg-[#20221e] hover:bg-[#2c2f29] text-[#9fe870] px-3 py-1.5 rounded-[14px] text-xs font-bold flex items-center gap-1 transition"
+          className="bg-[#20221e] hover:bg-[#2c2f29] text-[#9fe870] px-3 py-1.5 rounded-[12px] text-xs font-bold flex items-center gap-1 transition shrink-0"
         >
           <Plus size={12} /> 30s
         </button>
         <button
+          type="button"
           onClick={onStop}
-          className="w-8 h-8 rounded-full bg-[#2a1717] text-[#d03238] hover:bg-[#d03238] hover:text-white flex items-center justify-center font-bold text-xs transition"
+          className="w-7 h-7 rounded-full bg-[#2a1717] text-[#d03238] hover:bg-[#d03238] hover:text-white flex items-center justify-center font-bold text-xs transition shrink-0"
           title="Stop timer"
         >
           <X size={14} />
