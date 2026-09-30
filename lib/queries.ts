@@ -1,5 +1,6 @@
 import { unstable_cache, updateTag } from "next/cache";
 import prisma from "@/lib/prisma";
+import { asTracking } from "@/lib/exercise-library";
 
 export function userCacheTag(userId: string) {
   return `user:${userId}`;
@@ -136,10 +137,7 @@ export function getActiveWorkout(userId: string, planId?: string) {
       id: exercise.id,
       exerciseId: exercise.exerciseId,
       name: exercise.exercise?.name ?? exercise.name,
-      tracking:
-        exercise.exercise?.tracking === "reps" || exercise.exercise?.tracking === "hold"
-          ? exercise.exercise.tracking
-          : "weight",
+      tracking: asTracking(exercise.exercise?.tracking),
       targetSets: exercise.targetSets,
       restSeconds: exercise.restSeconds,
     }));

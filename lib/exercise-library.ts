@@ -10,6 +10,10 @@ export function isTracking(value: string | null | undefined): value is ExerciseT
   return value === "weight" || value === "reps" || value === "hold";
 }
 
+export function asTracking(value: string | null | undefined): ExerciseTracking {
+  return isTracking(value) ? value : "weight";
+}
+
 export const EXERCISE_LIBRARY: { name: string; tracking: ExerciseTracking }[] = [
   { name: "Bench Press", tracking: "weight" },
   { name: "Incline Bench Press", tracking: "weight" },

@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import PlanEditor from "./PlanEditor";
 import SubpageHeader from "@/components/SubpageHeader";
+import { asTracking } from "@/lib/exercise-library";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -44,9 +45,7 @@ export default async function EditPlanPage({ params }: PageProps) {
     id: exercise.id,
     exerciseId: exercise.exerciseId,
     name: exercise.exercise?.name ?? exercise.name,
-    tracking: exercise.exercise?.tracking === "reps" || exercise.exercise?.tracking === "hold"
-      ? exercise.exercise.tracking
-      : "weight",
+    tracking: asTracking(exercise.exercise?.tracking),
     targetSets: exercise.targetSets,
     restSeconds: exercise.restSeconds,
   }));
