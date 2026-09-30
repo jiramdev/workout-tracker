@@ -8,6 +8,8 @@ import { refreshUserCache } from "@/lib/queries";
 import { revalidateTabs } from "@/lib/revalidate-tabs";
 import { exerciseKey } from "@/lib/exercises";
 
+const MAX_SETS = 200;
+
 interface CompletedSet {
   exerciseId?: string | null;
   exerciseName: string;
@@ -15,6 +17,10 @@ interface CompletedSet {
   weight: number;
   reps: number;
   durationSeconds?: number | null;
+}
+
+function isCompletedSet(value: CompletedSet) {
+  return Boolean(value) && typeof value.exerciseName === "string";
 }
 
 export async function finishWorkout({
@@ -29,8 +35,23 @@ export async function finishWorkout({
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) throw new Error("Niet ingelogd");
 
+  const started = new Date(startedAt);
+  if (typeof startedAt !== "string" || Number.isNaN(started.getTime())) {
+    return { error: "Ongeldige starttijd." };
+  }
+  if (!Array.isArray(sets) || sets.length > MAX_SETS || sets.some((set) => !isCompletedSet(set))) {
+    return { error: "De sessie kon niet worden opgeslagen." };
+  }
+
   const completedAt = new Date();
   const userId = session.user.id;
+  const requestedPlanId = typeof planId === "string" && planId ? planId : null;
+  const ownedPlan = requestedPlanId
+    ? await prisma.workoutPlan.findFirst({
+        where: { id: requestedPlanId, userId },
+        select: { id: true },
+      })
+    : null;
   const keys = [...new Set(sets.map((set) => exerciseKey(set.exerciseName)).filter(Boolean))];
   const known = keys.length
     ? await prisma.exercise.findMany({
@@ -43,8 +64,8 @@ export async function finishWorkout({
   const workoutLog = await prisma.workoutLog.create({
     data: {
       userId,
-      planId: planId || null,
-      startedAt: new Date(startedAt),
+      planId: ownedPlan?.id ?? null,
+      startedAt: started,
       completedAt,
       entries: {
         create: sets.map((set) => {

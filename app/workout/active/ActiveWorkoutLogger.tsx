@@ -302,6 +302,7 @@ export default function ActiveWorkoutLogger({
 
   const [startedAt, setStartedAt] = useState("");
   const [isFinishing, setIsFinishing] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [restTarget, setRestTarget] = useState<number | null>(null);
   const setsRef = useRef<Record<string, SetRow[]>>({});
   const exercisesRef = useRef(exercises);
@@ -482,13 +483,25 @@ export default function ActiveWorkoutLogger({
       if (!confirm("Nog geen sets afgevinkt. Toch voltooien?")) return;
     }
 
+    setIsFinishing(true);
+    setSaveError(null);
+    try {
+      const result = await finishWorkout({ planId, startedAt, sets: completedSets });
+      if (!result?.success) {
+        setSaveError(result?.error ?? "Opslaan mislukt. Je sets staan nog op dit apparaat.");
+        setIsFinishing(false);
+        return;
+      }
+    } catch {
+      setSaveError("Opslaan mislukt. Je sets staan nog op dit apparaat.");
+      setIsFinishing(false);
+      return;
+    }
+
     stopTimer();
     localStorage.removeItem(setsStorageKey(planId));
     localStorage.removeItem("active_workout_sets_data");
     localStorage.removeItem(STORAGE_START_KEY);
-
-    setIsFinishing(true);
-    await finishWorkout({ planId, startedAt, sets: completedSets });
     router.push("/");
   };
 
@@ -533,6 +546,12 @@ export default function ActiveWorkoutLogger({
           onToggle={handleToggleSet}
         />
       ))}
+
+      {saveError && (
+        <p role="alert" className="px-1 text-[13px] text-red-300">
+          {saveError}
+        </p>
+      )}
 
       <button
         onClick={handleFinish}

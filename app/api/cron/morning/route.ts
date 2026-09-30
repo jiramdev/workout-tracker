@@ -2,33 +2,10 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import webpush from "web-push";
 import prisma from "@/lib/prisma";
+import { amsterdamParts } from "@/lib/amsterdam";
 import { revalidatePath } from "next/cache";
 
 export const dynamic = "force-dynamic";
-
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-function amsterdamNow() {
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-GB", {
-      timeZone: "Europe/Amsterdam",
-      weekday: "short",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      hourCycle: "h23",
-    })
-      .formatToParts(new Date())
-      .map((part) => [part.type, part.value])
-  );
-
-  return {
-    dayOfWeek: WEEKDAYS.indexOf(parts.weekday),
-    hour: Number(parts.hour),
-    dateKey: `${parts.year}-${parts.month}-${parts.day}`,
-  };
-}
 
 function exerciseLine(names: string[]) {
   if (names.length <= 1) return names[0] ?? "";
@@ -42,7 +19,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Niet toegestaan" }, { status: 401 });
   }
 
-  const { dayOfWeek, hour, dateKey } = amsterdamNow();
+  const { dayOfWeek, hour, dateKey } = amsterdamParts();
   if (dayOfWeek < 0 || hour !== 8) {
     return NextResponse.json({ skipped: true });
   }

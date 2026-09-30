@@ -59,7 +59,7 @@ export default async function Shell({ tab }: { tab: number }) {
           image={session.user.image}
           dayOfWeek={dashboard.dayOfWeek}
           todayPlan={dashboard.todayPlan}
-          trainedDaysCount={dashboard.trainedDaysCount}
+          sessionCount={dashboard.sessionCount}
           latestWeight={dashboard.latestWeight}
           unreadCount={unreadCount}
         />,

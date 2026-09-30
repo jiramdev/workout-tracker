@@ -1,5 +1,6 @@
 import { Trophy } from "lucide-react";
 import AnalyticsChart from "@/app/analytics/AnalyticsChart";
+import { formatAmsterdamDate } from "@/lib/amsterdam";
 
 type Workout = {
   completedAt: string;
@@ -34,10 +35,7 @@ export default function AnalyticsPanel({
 
     if (workout.completedAt && sessionBestE1RM > 0) {
       strengthChartPoints.push({
-        date: new Date(workout.completedAt).toLocaleDateString("nl-NL", {
-          day: "numeric",
-          month: "short",
-        }),
+        date: formatAmsterdamDate(workout.completedAt),
         value: Math.round(sessionBestE1RM),
       });
     }
@@ -61,10 +59,7 @@ export default function AnalyticsPanel({
     .slice(0, 3);
 
   const weightChartPoints = weightLogs.map((log) => ({
-    date: new Date(log.loggedAt).toLocaleDateString("nl-NL", {
-      day: "numeric",
-      month: "short",
-    }),
+    date: formatAmsterdamDate(log.loggedAt),
     value: Number(log.weight.toFixed(1)),
   }));
 
