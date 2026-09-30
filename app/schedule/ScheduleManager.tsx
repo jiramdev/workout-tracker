@@ -6,7 +6,7 @@ import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
 import Prefetch from "@/components/Prefetch";
 import { popTransition } from "@/lib/motion";
-import { Plus, Dumbbell, ChevronRight, Moon, Sparkles } from "lucide-react";
+import { Plus, Dumbbell, ChevronRight, ChevronDown, Moon, Check } from "lucide-react";
 import { assignPlanToDay, createWorkoutPlan } from "./actions";
 
 interface Plan {
@@ -34,7 +34,13 @@ export default function ScheduleManager({ plans, initialDays }: ScheduleManagerP
   const [dayAssignments, setDayAssignments] = useState(initialDays);
   const [isCreatingPlan, setIsCreatingPlan] = useState(false);
   const [newPlanName, setNewPlanName] = useState("");
-  const [activeDayPicker, setActiveDayPicker] = useState<number | null>(null);
+  const [dayMenu, setDayMenu] = useState<{
+    day: number;
+    top: number;
+    left: number;
+    width: number;
+    origin: "top" | "bottom";
+  } | null>(null);
 
   // Koppel plan aan een dag
   const handleSelectPlanForDay = async (day: number, planId: string | null) => {
@@ -44,8 +50,26 @@ export default function ScheduleManager({ plans, initialDays }: ScheduleManagerP
       else delete copy[day];
       return copy;
     });
-    setActiveDayPicker(null);
+    setDayMenu(null);
     await assignPlanToDay(day, planId);
+  };
+
+  const openDayMenu = (day: number, button: HTMLButtonElement) => {
+    if (dayMenu?.day === day) {
+      setDayMenu(null);
+      return;
+    }
+    const rect = button.getBoundingClientRect();
+    const menuHeight = (1 + plans.length) * 48 + 12;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const openUp = spaceBelow < menuHeight + 96 && rect.top > menuHeight + 16;
+    setDayMenu({
+      day,
+      top: openUp ? rect.top - menuHeight - 8 : rect.bottom + 8,
+      left: rect.left,
+      width: rect.width,
+      origin: openUp ? "bottom" : "top",
+    });
   };
 
   // Nieuw plan aanmaken
@@ -77,7 +101,7 @@ export default function ScheduleManager({ plans, initialDays }: ScheduleManagerP
             return (
               <div key={day} className="relative">
                 <button
-                  onClick={() => setActiveDayPicker(activeDayPicker === day ? null : day)}
+                  onClick={(event) => openDayMenu(day, event.currentTarget)}
                   className="w-full bg-[#1b1b1e] hover:bg-[#202024] border border-white/[0.04] rounded-2xl px-4 py-3 flex items-center justify-between transition apple-press"
                 >
                   <div className="flex items-center gap-3">
@@ -97,54 +121,13 @@ export default function ScheduleManager({ plans, initialDays }: ScheduleManagerP
                     >
                       {currentPlan ? currentPlan.name : "Rustdag"}
                     </span>
-                    <ChevronRight className="w-3.5 h-3.5 text-[#52525b]" />
+                    <ChevronDown
+                      className={`w-4 h-4 text-[#71717a] transition-transform ${
+                        dayMenu?.day === day ? "rotate-180" : ""
+                      }`}
+                    />
                   </div>
                 </button>
-
-                {/* Dropdown / Modal om plan te kiezen voor deze dag */}
-                <AnimatePresence>
-                {activeDayPicker === day && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -6 }}
-                    transition={popTransition}
-                    className="mt-2 bg-[#202026] border border-white/[0.08] rounded-2xl p-2 space-y-1 shadow-[0_12px_28px_rgba(0,0,0,0.4)] z-20"
-                  >
-                    <button
-                      onClick={() => handleSelectPlanForDay(day, null)}
-                      className={`w-full px-3 py-2.5 rounded-xl text-left text-[13px] flex items-center gap-2 transition ${
-                        !assignedPlanId
-                          ? "bg-[#baa3d0] text-[#141416] font-bold"
-                          : "text-[#a1a1aa] hover:bg-white/[0.05]"
-                      }`}
-                    >
-                      <Moon className="w-4 h-4" />
-                      <span>Rustdag (Geen workout)</span>
-                    </button>
-
-                    {plans.map((p) => (
-                      <button
-                        key={p.id}
-                        onClick={() => handleSelectPlanForDay(day, p.id)}
-                        className={`w-full px-3 py-2.5 rounded-xl text-left text-[13px] flex items-center justify-between transition ${
-                          assignedPlanId === p.id
-                            ? "bg-[#baa3d0] text-[#141416] font-bold"
-                            : "text-white hover:bg-white/[0.05]"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Dumbbell className="w-4 h-4" />
-                          <span>{p.name}</span>
-                        </div>
-                        <span className="text-[11px] opacity-70">
-                          {p.exercisesCount} oefeningen
-                        </span>
-                      </button>
-                    ))}
-                  </motion.div>
-                )}
-                </AnimatePresence>
               </div>
             );
           })}
@@ -226,6 +209,67 @@ export default function ScheduleManager({ plans, initialDays }: ScheduleManagerP
           )}
         </div>
       </section>
+
+      <AnimatePresence>
+        {dayMenu && (
+          <motion.button
+            key="day-menu-backdrop"
+            type="button"
+            aria-label="Sluiten"
+            className="fixed inset-0 z-[60] bg-black/20"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            onClick={() => setDayMenu(null)}
+          />
+        )}
+        {dayMenu && (
+          <motion.div
+            key="day-menu"
+            role="menu"
+            initial={{ opacity: 0, scale: 0.94 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.96 }}
+            transition={popTransition}
+            style={{
+              top: dayMenu.top,
+              left: dayMenu.left,
+              width: dayMenu.width,
+              transformOrigin: dayMenu.origin === "bottom" ? "bottom center" : "top center",
+            }}
+            className="fixed z-[70] overflow-hidden rounded-[14px] border border-white/10 bg-[#2c2c2e]/92 shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur-2xl"
+          >
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => handleSelectPlanForDay(dayMenu.day, null)}
+              className="w-full px-4 py-3 flex items-center gap-3 text-left text-[16px] text-white active:bg-white/10"
+            >
+              <Moon className="w-4 h-4 text-[#a1a1aa]" />
+              <span className="flex-1">Rustdag</span>
+              {!dayAssignments[dayMenu.day] && <Check className="w-4 h-4 text-[#baa3d0]" />}
+            </button>
+            {plans.length > 0 && <div className="h-px bg-white/10" />}
+            {plans.map((plan) => (
+              <button
+                key={plan.id}
+                type="button"
+                role="menuitem"
+                onClick={() => handleSelectPlanForDay(dayMenu.day, plan.id)}
+                className="w-full px-4 py-3 flex items-center gap-3 text-left text-[16px] text-white active:bg-white/10"
+              >
+                <Dumbbell className="w-4 h-4 text-[#a1a1aa]" />
+                <span className="flex-1 truncate">{plan.name}</span>
+                <span className="text-[12px] text-[#8e8e93]">{plan.exercisesCount}</span>
+                {dayAssignments[dayMenu.day] === plan.id && (
+                  <Check className="w-4 h-4 text-[#baa3d0]" />
+                )}
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
