@@ -84,13 +84,13 @@ export default function BottomBar() {
   const router = useRouter();
 
   useEffect(() => {
-    if (pathname === "/login" || pathname === "/register" || pathname.startsWith("/onboarding")) return;
+    if (pathname === "/login" || pathname === "/register" || pathname.startsWith("/onboarding") || pathname === "/workout/active") return;
     for (const tab of TABS) {
       router.prefetch(tab.href, { kind: PrefetchKind.FULL });
     }
   }, [pathname, router]);
 
-  if (pathname === "/login" || pathname === "/register" || pathname.startsWith("/onboarding")) {
+  if (pathname === "/login" || pathname === "/register" || pathname.startsWith("/onboarding") || pathname === "/workout/active") {
     return null;
   }
 

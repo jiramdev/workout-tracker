@@ -444,6 +444,15 @@ export default function ActiveWorkoutLogger({
     router.push("/");
   };
 
+  function handleCancel() {
+    if (!confirm("Workout annuleren? Er wordt niets opgeslagen.")) return;
+    clearTimer();
+    localStorage.removeItem(setsStorageKey(planId));
+    localStorage.removeItem("active_workout_sets_data");
+    localStorage.removeItem(STORAGE_START_KEY);
+    router.push("/");
+  }
+
   return (
     <div className="space-y-3.5">
       <RestTimer
@@ -472,6 +481,15 @@ export default function ActiveWorkoutLogger({
         <span className="font-editorial text-[20px] tracking-wider text-[#baa3d0] uppercase leading-none block">
           {isFinishing ? "OPSLAAN..." : "SESSIE VOLTOOIEN"}
         </span>
+      </button>
+
+      <button
+        type="button"
+        onClick={handleCancel}
+        disabled={isFinishing}
+        className="w-full bg-[#1b1b1e] border border-white/[0.08] text-white rounded-full py-3.5 font-editorial text-[18px] tracking-wider apple-press disabled:opacity-50"
+      >
+        ANNULEREN
       </button>
     </div>
   );
