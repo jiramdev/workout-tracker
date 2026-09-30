@@ -59,10 +59,12 @@ function readRestTarget() {
 function RestTimer({
   target,
   onAdd,
+  onCancel,
   onExpire,
 }: {
   target: number | null;
   onAdd: () => void;
+  onCancel: () => void;
   onExpire: () => void;
 }) {
   const [secondsRemaining, setSecondsRemaining] = useState<number | null>(null);
@@ -131,7 +133,7 @@ function RestTimer({
 
           <button
             type="button"
-            onClick={onExpire}
+            onClick={onCancel}
             className="w-8 h-8 rounded-full bg-white/[0.08] hover:bg-white/[0.14] text-[#a1a1aa] hover:text-white flex items-center justify-center transition apple-press"
           >
             <X className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -287,6 +289,10 @@ export default function ActiveWorkoutLogger({
 
   useEffect(() => {
     setRestTarget(readRestTarget());
+    if (!("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.register("/sw.js").catch((err) => {
+      console.error("Service worker registreren mislukt:", err);
+    });
   }, []);
 
   useEffect(() => {
@@ -323,7 +329,7 @@ export default function ActiveWorkoutLogger({
             }).catch((err) => console.error("Achtergrond push plannen mislukt:", err));
           }
         })
-        .catch(() => {});
+        .catch((err) => console.error("Achtergrond push plannen mislukt:", err));
     },
     [planId]
   );
@@ -333,6 +339,35 @@ export default function ActiveWorkoutLogger({
     localStorage.removeItem(STORAGE_EXERCISE_KEY);
     setRestTarget(null);
   }, []);
+
+  const finishRest = useCallback(() => {
+    const exerciseName = localStorage.getItem(STORAGE_EXERCISE_KEY) || "je oefening";
+    clearTimer();
+
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    if (Notification.permission !== "granted") return;
+
+    const title = "Rust voorbij ⚡️";
+    const body = `Tijd voor je volgende set van ${exerciseName}!`;
+    const options = {
+      body,
+      icon: "/icon.png",
+      badge: "/icon.png",
+      tag: "rest-over",
+      renotify: true,
+    };
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.ready
+        .then((reg) => reg.showNotification(title, options))
+        .catch(() => {
+          new Notification(title, { body });
+        });
+      return;
+    }
+
+    new Notification(title, { body });
+  }, [clearTimer]);
 
   const startRestTimer = useCallback(
     (seconds: number, exerciseName: string) => {
@@ -423,7 +458,12 @@ export default function ActiveWorkoutLogger({
 
   return (
     <div className="space-y-3.5">
-      <RestTimer target={restTarget} onAdd={addTime} onExpire={clearTimer} />
+      <RestTimer
+        target={restTarget}
+        onAdd={addTime}
+        onCancel={clearTimer}
+        onExpire={finishRest}
+      />
 
       {exercises.map((ex) => (
         <ExerciseSection

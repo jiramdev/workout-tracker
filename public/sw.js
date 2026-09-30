@@ -26,6 +26,8 @@ self.addEventListener("install", (event) => {
       body: data.body || "Tijd voor de volgende set!",
       icon: "/icon.png",
       badge: "/icon.png",
+      tag: "rest-over",
+      renotify: true,
       vibrate: [300, 150, 300],
       data: {
         url: data.url || "/workout/active",

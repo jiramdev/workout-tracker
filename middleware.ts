@@ -17,6 +17,6 @@ export const config = {
      * - _next/image (image optimalisatie)
      * - favicon.ico, manifest.webmanifest, iconen
      */
-    "/((?!api|login|register|_next/static|_next/image|favicon.ico|manifest.webmanifest|icons|.*\\.png$).*)",
+    "/((?!api|login|register|_next/static|_next/image|favicon.ico|sw\\.js|manifest.webmanifest|icons|.*\\.png$).*)",
   ],
 };
