@@ -5,7 +5,8 @@ import { getDashboard } from "@/lib/queries";
 import Prefetch from "@/components/Prefetch";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Settings } from "lucide-react";
+import { Bell } from "lucide-react";
+import prisma from "@/lib/prisma";
 
 const dayNamesNL = [
   "ZONDAG",
@@ -21,8 +22,13 @@ export default async function HomePage() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) redirect("/login");
 
-  const { todayPlan, latestWeight, trainedDaysCount, dayOfWeek, profileName, profileEmail } =
-    await getDashboard(session.user.id);
+  const [{ todayPlan, latestWeight, trainedDaysCount, dayOfWeek, profileName, profileEmail }, unreadCount] =
+    await Promise.all([
+      getDashboard(session.user.id),
+      prisma.appNotification.count({
+        where: { userId: session.user.id, read: false },
+      }),
+    ]);
 
   const displayName = profileName || profileEmail?.split("@")[0] || "ATHLETE";
   const userInitial = displayName.charAt(0).toUpperCase();
@@ -30,7 +36,7 @@ export default async function HomePage() {
 
   return (
     <div className="min-h-screen bg-[#baa3d0] text-white pb-32 pt-4 px-4 select-none">
-      <Prefetch hrefs={[workoutHref, "/account"]} />
+      <Prefetch hrefs={[workoutHref, "/account", "/notifications"]} />
       <main className="max-w-sm mx-auto space-y-3.5">
         {/* Top Header: Account Pill links & Instellingen rechts */}
         <header className="flex justify-between items-center px-1 py-1">
@@ -56,13 +62,16 @@ export default async function HomePage() {
             </span>
           </Link>
 
-          {/* Rechts: Instellingen */}
           <Link
-            href="/settings"
-            prefetch={false}
-            className="w-10 h-10 rounded-full bg-[#141416] border border-white/[0.08] flex items-center justify-center text-[#a1a1aa] hover:text-white transition apple-press shadow-[0_4px_12px_rgba(0,0,0,0.15)]"
+            href="/notifications"
+            prefetch={true}
+            aria-label="Meldingen"
+            className="relative w-10 h-10 rounded-full bg-[#141416] border border-white/[0.08] flex items-center justify-center text-[#a1a1aa] hover:text-white transition apple-press shadow-[0_4px_12px_rgba(0,0,0,0.15)]"
           >
-            <Settings className="w-4 h-4 stroke-[1.8]" />
+            <Bell className="w-4 h-4 stroke-[1.8]" />
+            {unreadCount > 0 && (
+              <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#baa3d0]" />
+            )}
           </Link>
         </header>
 

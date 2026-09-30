@@ -22,15 +22,15 @@ export default function OnboardingForm() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  function skip() {
-    router.push("/");
+  function continueSignup() {
+    router.push("/onboarding/notifications");
     router.refresh();
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!age.trim() && !heightCm.trim() && !sex && !weight.trim()) {
-      skip();
+      continueSignup();
       return;
     }
 
@@ -42,8 +42,7 @@ export default function OnboardingForm() {
       setSaving(false);
       return;
     }
-    router.push("/");
-    router.refresh();
+    continueSignup();
   }
 
   return (
@@ -147,7 +146,7 @@ export default function OnboardingForm() {
 
         <button
           type="button"
-          onClick={skip}
+          onClick={continueSignup}
           disabled={saving}
           className="block w-full text-center text-[13px] font-semibold text-[#141416] underline underline-offset-2 disabled:opacity-50"
         >

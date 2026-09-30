@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 const fieldClass =
@@ -10,12 +10,11 @@ const fieldClass =
 
 export default function LoginPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   function nextPath() {
-    const callbackUrl = searchParams.get("callbackUrl");
+    const callbackUrl = new URLSearchParams(window.location.search).get("callbackUrl");
     if (callbackUrl?.startsWith("/") && !callbackUrl.startsWith("//")) return callbackUrl;
     return "/";
   }

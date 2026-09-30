@@ -357,12 +357,6 @@ export default function ActiveWorkoutLogger({
 
   const startRestTimer = useCallback(
     (seconds: number, exerciseName: string) => {
-      if (typeof window !== "undefined" && "Notification" in window) {
-        if (Notification.permission === "default") {
-          Notification.requestPermission();
-        }
-      }
-
       const targetTimestamp = Date.now() + seconds * 1000;
       localStorage.setItem(STORAGE_TARGET_KEY, targetTimestamp.toString());
       localStorage.setItem(STORAGE_EXERCISE_KEY, exerciseName);

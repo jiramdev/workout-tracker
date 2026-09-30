@@ -1,11 +1,14 @@
 // app/api/rest-timer/route.ts
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
 import { Client } from "@upstash/qstash";
+import { authOptions } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   try {
+    const session = await getServerSession(authOptions);
     const { subscription, delaySeconds, exerciseName, planId } = await req.json();
 
     if (!subscription) {
@@ -30,6 +33,7 @@ export async function POST(req: Request) {
         subscription,
         exerciseName: exerciseName || "je oefening",
         planId: planId || null,
+        userId: session?.user?.id ?? null,
       },
       delay: Math.max(1, delaySeconds || 90),
     });

@@ -14,7 +14,7 @@ export async function GET() {
       getSchedule(session.user.id),
     ]);
 
-    const hrefs = [...TABS];
+    const hrefs = [...TABS, "/notifications"];
     for (const plan of schedule.plans) hrefs.push(`/plans/${plan.id}`);
     if (dashboard.todayPlan) hrefs.push(`/workout/active?planId=${dashboard.todayPlan.id}`);
 

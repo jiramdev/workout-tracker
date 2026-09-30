@@ -21,6 +21,7 @@ model User {
   schedule     WeeklySchedule?
   workoutLogs  WorkoutLog[]
   weightLogs   BodyWeightLog[]
+  notifications AppNotification[]
 }
 
 model WorkoutPlan {
@@ -80,6 +81,19 @@ model LogEntry {
   setNumber    Int
   reps         Int
   weight       Float
+}
+
+model AppNotification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  body      String
+  href      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
 
 model BodyWeightLog {

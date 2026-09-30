@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { PrefetchKind } from "next/dist/client/components/router-reducer/router-reducer-types";
 
-const AUTH_ROUTES = ["/login", "/register", "/onboarding"];
+const AUTH_ROUTES = ["/login", "/register"];
 
 function sameRoute(href: string, pathname: string, search: string) {
   const target = new URL(href, window.location.origin);
@@ -58,10 +58,11 @@ export default function LaunchScreen() {
   const [progress, setProgress] = useState(0);
   const started = useRef(false);
 
-  const show = !finished && !AUTH_ROUTES.includes(pathname);
+  const signingUp = pathname.startsWith("/onboarding");
+  const show = !finished && !AUTH_ROUTES.includes(pathname) && !signingUp;
 
   useEffect(() => {
-    if (AUTH_ROUTES.includes(pathname) || started.current) return;
+    if (AUTH_ROUTES.includes(pathname) || pathname.startsWith("/onboarding") || started.current) return;
     started.current = true;
 
     const prefetch = (href: string) => {

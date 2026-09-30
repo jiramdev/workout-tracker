@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { updateAccount, updatePassword, type AccountInput } from "./actions";
+import NotificationSettings from "@/components/NotificationSettings";
 
 const SEX_OPTIONS = [
   { value: "man", label: "Man" },
@@ -255,6 +256,8 @@ export default function AccountForm({ initial }: { initial: AccountInput }) {
           {savingPassword ? "OPSLAAN..." : "WACHTWOORD WIJZIGEN"}
         </button>
       </form>
+
+      <NotificationSettings />
 
       <button
         type="button"
