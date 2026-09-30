@@ -3,7 +3,7 @@
 
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, X, Plus } from "lucide-react";
+import { Check, X } from "lucide-react";
 import { motion } from "motion/react";
 import { popTransition } from "@/lib/motion";
 import { finishWorkout } from "./actions";
@@ -65,12 +65,10 @@ function readRestTarget() {
 
 function RestTimer({
   target,
-  onAdd,
   onCancel,
   onExpire,
 }: {
   target: number | null;
-  onAdd: () => void;
   onCancel: () => void;
   onExpire: () => void;
 }) {
@@ -120,37 +118,21 @@ function RestTimer({
       initial={{ opacity: 0, y: -12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={popTransition}
-      className="fixed top-4 left-0 right-0 z-[999] flex justify-center px-4 pointer-events-none"
+      className="fixed top-3 left-0 right-0 z-[70] px-4 pointer-events-none"
     >
-      <div className="pointer-events-auto bg-[#141416] border border-[#baa3d0]/40 rounded-full pl-5 pr-3 py-2 flex items-center gap-4 shadow-[0_16px_36px_rgba(0,0,0,0.6)]">
-        <div className="flex items-baseline gap-2">
-          <span className="font-editorial text-[24px] tracking-wider text-[#baa3d0] leading-none">
-            {Math.floor(secondsRemaining / 60)}:
-            {(secondsRemaining % 60).toString().padStart(2, "0")}
-          </span>
-          <span className="text-[10px] font-semibold tracking-wider text-[#a1a1aa] uppercase">
-            Rust
-          </span>
-        </div>
-
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={onAdd}
-            className="h-8 px-2.5 rounded-full bg-white/[0.08] hover:bg-white/[0.14] text-white text-[11px] font-semibold flex items-center gap-1 transition apple-press"
-          >
-            <Plus className="w-3 h-3 text-[#baa3d0]" />
-            30s
-          </button>
-
-          <button
-            type="button"
-            onClick={onCancel}
-            className="w-8 h-8 rounded-full bg-white/[0.08] hover:bg-white/[0.14] text-[#a1a1aa] hover:text-white flex items-center justify-center transition apple-press"
-          >
-            <X className="w-3.5 h-3.5 stroke-[2.5]" />
-          </button>
-        </div>
+      <div className="pointer-events-auto relative mx-auto max-w-sm bg-[#141416] border border-[#baa3d0]/50 rounded-[34px] px-6 py-7 text-center shadow-[0_24px_60px_rgba(0,0,0,0.55)]">
+        <button
+          type="button"
+          onClick={onCancel}
+          aria-label="Timer stoppen"
+          className="absolute top-3 right-3 w-9 h-9 rounded-full bg-white/[0.06] text-[#a1a1aa] flex items-center justify-center apple-press"
+        >
+          <X className="w-4 h-4 stroke-[2.5]" />
+        </button>
+        <p className="text-[12px] font-semibold tracking-[0.22em] text-[#baa3d0] uppercase">Rust</p>
+        <p className="mt-2 font-editorial text-[92px] leading-none tracking-tight text-white">
+          {Math.floor(secondsRemaining / 60)}:{(secondsRemaining % 60).toString().padStart(2, "0")}
+        </p>
       </div>
     </motion.div>
   );
@@ -387,19 +369,6 @@ export default function ActiveWorkoutLogger({
     [scheduleServerPush]
   );
 
-  const addTime = useCallback(() => {
-    const storedTarget = localStorage.getItem(STORAGE_TARGET_KEY);
-    const exerciseName = localStorage.getItem(STORAGE_EXERCISE_KEY) || "";
-    const base = storedTarget ? parseInt(storedTarget, 10) : Date.now();
-    const newTarget = Math.max(Date.now(), base) + 30 * 1000;
-
-    localStorage.setItem(STORAGE_TARGET_KEY, newTarget.toString());
-    setRestTarget(newTarget);
-
-    const remainingSecs = Math.max(1, Math.ceil((newTarget - Date.now()) / 1000));
-    scheduleServerPush(remainingSecs, exerciseName);
-  }, [scheduleServerPush]);
-
   const handleUpdate = useCallback(
     (exerciseName: string, setIndex: number, field: "weight" | "reps", value: string) => {
       setSetsData((prev) => {
@@ -469,12 +438,25 @@ export default function ActiveWorkoutLogger({
 
   return (
     <div className="space-y-3.5">
-      <RestTimer
-        target={restTarget}
-        onAdd={addTime}
-        onCancel={clearTimer}
-        onExpire={clearTimer}
-      />
+      <header className="flex items-center justify-between px-1 py-1">
+        <button
+          type="button"
+          onClick={handleCancel}
+          disabled={isFinishing}
+          aria-label="Workout annuleren"
+          className="w-10 h-10 rounded-full bg-[#141416] border border-white/[0.08] flex items-center justify-center text-white apple-press shadow-[0_4px_12px_rgba(0,0,0,0.15)] disabled:opacity-50"
+        >
+          <X className="w-5 h-5 stroke-[1.8]" />
+        </button>
+        <div className="h-10 bg-[#141416] border border-white/[0.08] px-4 rounded-full flex items-center gap-2 shadow-[0_4px_12px_rgba(0,0,0,0.15)]">
+          <span className="w-2 h-2 rounded-full bg-[#baa3d0]" />
+          <span className="font-editorial text-[14px] tracking-wider text-white leading-none uppercase">
+            Workout
+          </span>
+        </div>
+      </header>
+
+      <RestTimer target={restTarget} onCancel={clearTimer} onExpire={clearTimer} />
 
       {exercises.map((ex) => (
         <ExerciseSection
@@ -495,15 +477,6 @@ export default function ActiveWorkoutLogger({
         <span className="font-editorial text-[20px] tracking-wider text-[#baa3d0] uppercase leading-none block">
           {isFinishing ? "OPSLAAN..." : "SESSIE VOLTOOIEN"}
         </span>
-      </button>
-
-      <button
-        type="button"
-        onClick={handleCancel}
-        disabled={isFinishing}
-        className="w-full bg-[#1b1b1e] border border-white/[0.08] text-white rounded-full py-3.5 font-editorial text-[18px] tracking-wider apple-press disabled:opacity-50"
-      >
-        ANNULEREN
       </button>
     </div>
   );

@@ -21,13 +21,13 @@ interface ScheduleManagerProps {
 }
 
 const DAYS_OF_WEEK = [
-  { day: 1, name: "MAANDAG", short: "MA" },
-  { day: 2, name: "DINSDAG", short: "DI" },
-  { day: 3, name: "WOENSDAG", short: "WO" },
-  { day: 4, name: "DONDERDAG", short: "DO" },
-  { day: 5, name: "VRIJDAG", short: "VR" },
-  { day: 6, name: "ZATERDAG", short: "ZA" },
-  { day: 0, name: "ZONDAG", short: "ZO" },
+  { day: 1, name: "Maandag" },
+  { day: 2, name: "Dinsdag" },
+  { day: 3, name: "Woensdag" },
+  { day: 4, name: "Donderdag" },
+  { day: 5, name: "Vrijdag" },
+  { day: 6, name: "Zaterdag" },
+  { day: 0, name: "Zondag" },
 ];
 
 export default function ScheduleManager({ plans, initialDays }: ScheduleManagerProps) {
@@ -85,7 +85,7 @@ export default function ScheduleManager({ plans, initialDays }: ScheduleManagerP
     <div className="space-y-4">
       <Prefetch hrefs={plans.map((plan) => `/plans/${plan.id}`)} />
       {/* 1. Weekrooster overzicht (Ma t/m Zo) */}
-      <section className="bg-[#141416] border border-white/[0.08] rounded-[34px] p-5 shadow-[0_16px_36px_rgba(0,0,0,0.25)] space-y-3">
+      <section className="bg-[#141416] border border-white/[0.08] rounded-[34px] p-4 shadow-[0_16px_36px_rgba(0,0,0,0.25)] space-y-2">
         <div className="flex items-center justify-between px-1">
           <span className="text-[11px] font-semibold tracking-[0.18em] text-[#baa3d0] uppercase">
             Weekrooster
@@ -93,42 +93,35 @@ export default function ScheduleManager({ plans, initialDays }: ScheduleManagerP
           <span className="text-[11px] text-[#71717a] font-medium">Tik om te koppelen</span>
         </div>
 
-        <div className="space-y-2 pt-1">
-          {DAYS_OF_WEEK.map(({ day, name, short }) => {
+        <div className="space-y-1.5">
+          {DAYS_OF_WEEK.map(({ day, name }) => {
             const assignedPlanId = dayAssignments[day];
             const currentPlan = plans.find((p) => p.id === assignedPlanId);
 
             return (
-              <div key={day} className="relative">
-                <button
-                  onClick={(event) => openDayMenu(day, event.currentTarget)}
-                  className="w-full bg-[#1b1b1e] hover:bg-[#202024] border border-white/[0.04] rounded-2xl px-4 py-3 flex items-center justify-between transition apple-press"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="w-8 h-8 rounded-full bg-[#242429] text-[11px] font-bold text-[#baa3d0] flex items-center justify-center">
-                      {short}
-                    </span>
-                    <span className="font-editorial text-[16px] tracking-wide text-white leading-none">
-                      {name}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`text-[13px] font-medium ${
-                        currentPlan ? "text-[#baa3d0]" : "text-[#71717a]"
-                      }`}
-                    >
-                      {currentPlan ? currentPlan.name : "Rustdag"}
-                    </span>
-                    <ChevronDown
-                      className={`w-4 h-4 text-[#71717a] transition-transform ${
-                        dayMenu?.day === day ? "rotate-180" : ""
-                      }`}
-                    />
-                  </div>
-                </button>
-              </div>
+              <button
+                key={day}
+                onClick={(event) => openDayMenu(day, event.currentTarget)}
+                className="w-full bg-[#1b1b1e] border border-white/[0.04] rounded-2xl px-3.5 py-2 flex items-center justify-between gap-2 apple-press"
+              >
+                <span className="font-editorial text-[15px] tracking-wide text-white leading-none uppercase">
+                  {name}
+                </span>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span
+                    className={`text-[12px] font-medium truncate ${
+                      currentPlan ? "text-[#baa3d0]" : "text-[#71717a]"
+                    }`}
+                  >
+                    {currentPlan ? currentPlan.name : "Rustdag"}
+                  </span>
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 shrink-0 text-[#52525b] transition-transform ${
+                      dayMenu?.day === day ? "rotate-180" : ""
+                    }`}
+                  />
+                </div>
+              </button>
             );
           })}
         </div>
