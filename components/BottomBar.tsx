@@ -90,6 +90,88 @@ export default function BottomBar() {
     }
   }, [pathname, router]);
 
+  useEffect(() => {
+    const index = TAB_HREFS.indexOf(pathname as (typeof TAB_HREFS)[number]);
+    if (index === -1) return;
+
+    let startX = 0;
+    let startY = 0;
+    let horizontal = false;
+    let active = false;
+
+    const onStart = (event: TouchEvent) => {
+      if (event.touches.length !== 1) return;
+      const target = event.target;
+      if (target instanceof Element && target.closest("input, textarea, select, [data-no-swipe]")) return;
+      startX = event.touches[0].clientX;
+      startY = event.touches[0].clientY;
+      horizontal = false;
+      active = true;
+    };
+
+    const onMove = (event: TouchEvent) => {
+      if (!active || event.touches.length !== 1) return;
+      const dx = event.touches[0].clientX - startX;
+      const dy = event.touches[0].clientY - startY;
+      if (!horizontal && Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+      if (!horizontal && Math.abs(dy) > Math.abs(dx)) {
+        active = false;
+        return;
+      }
+      horizontal = true;
+      event.preventDefault();
+    };
+
+    const onEnd = (event: TouchEvent) => {
+      if (!active || !horizontal) {
+        active = false;
+        return;
+      }
+      active = false;
+      const dx = event.changedTouches[0].clientX - startX;
+      const dy = event.changedTouches[0].clientY - startY;
+      if (Math.abs(dx) < 56 || Math.abs(dx) < Math.abs(dy)) return;
+      if (document.querySelector("[data-page-clone]")) return;
+
+      const nextIndex = dx < 0 ? index + 1 : index - 1;
+      if (nextIndex < 0 || nextIndex >= TAB_HREFS.length) return;
+
+      const page = document.getElementById("page-root");
+      const href = TAB_HREFS[nextIndex];
+      const direction = dx < 0 ? 1 : -1;
+      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (!page || reduce) {
+        router.replace(href);
+        return;
+      }
+      slidePages(page, direction, () => router.replace(href));
+    };
+
+    const onCancel = () => {
+      active = false;
+    };
+
+    const onEdge = (event: TouchEvent) => {
+      if (event.touches.length !== 1) return;
+      const x = event.touches[0].clientX;
+      if (x < 16 || x > window.innerWidth - 16) event.preventDefault();
+    };
+
+    document.addEventListener("touchstart", onEdge, { passive: false, capture: true });
+    document.addEventListener("touchstart", onStart, { passive: true });
+    document.addEventListener("touchmove", onMove, { passive: false });
+    document.addEventListener("touchend", onEnd);
+    document.addEventListener("touchcancel", onCancel);
+
+    return () => {
+      document.removeEventListener("touchstart", onEdge, true);
+      document.removeEventListener("touchstart", onStart);
+      document.removeEventListener("touchmove", onMove);
+      document.removeEventListener("touchend", onEnd);
+      document.removeEventListener("touchcancel", onCancel);
+    };
+  }, [pathname, router]);
+
   if (pathname === "/login" || pathname === "/register" || pathname.startsWith("/onboarding") || pathname === "/workout/active") {
     return null;
   }
@@ -130,9 +212,9 @@ export default function BottomBar() {
 
                 event.preventDefault();
                 try {
-                  slidePages(page, slide === "nav-forward" ? 1 : -1, () => router.push(tab.href));
+                  slidePages(page, slide === "nav-forward" ? 1 : -1, () => router.replace(tab.href));
                 } catch {
-                  router.push(tab.href);
+                  router.replace(tab.href);
                 }
               }}
               className={`p-2 rounded-full transition apple-press flex items-center justify-center relative ${

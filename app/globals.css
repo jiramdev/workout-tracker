@@ -9,6 +9,7 @@ html,
 body {
   background-color: #baa3d0;
   color-scheme: light;
+  overscroll-behavior-x: none;
 }
 
 body {
@@ -42,4 +43,5 @@ body {
 #page-root {
   min-height: 100vh;
   background: #baa3d0;
+  touch-action: pan-y;
 }
