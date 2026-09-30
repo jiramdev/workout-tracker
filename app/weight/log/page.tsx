@@ -4,7 +4,7 @@
 import { useState } from "react";
 import { logBodyWeight } from "@/app/actions/workout";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
+import SubpageHeader from "@/components/SubpageHeader";
 
 export default function WeightLogPage() {
   const router = useRouter();
@@ -34,13 +34,8 @@ export default function WeightLogPage() {
   }
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-zinc-100 p-4 max-w-xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <Link href="/" className="text-xs text-zinc-400 hover:text-white">
-          ← Annuleren
-        </Link>
-        <h1 className="text-xl font-bold">Lichaamsgewicht Invoeren</h1>
-      </div>
+    <main className="min-h-screen bg-[#baa3d0] text-white p-4 max-w-sm mx-auto space-y-6">
+      <SubpageHeader title="Gewicht" href="/account" />
 
       {error && (
         <div className="p-3 bg-red-950/60 border border-red-800 text-red-200 text-sm rounded-lg">

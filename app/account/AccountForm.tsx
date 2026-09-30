@@ -27,8 +27,6 @@ export default function AccountForm({ initial }: { initial: AccountInput }) {
   const [passwordSaved, setPasswordSaved] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
 
-  const initialLetter = (profile.name.trim() || profile.email || "A").charAt(0).toUpperCase();
-
   function updateField(field: keyof AccountInput, value: string) {
     setProfile((current) => ({ ...current, [field]: value }));
     setProfileSaved(false);
@@ -68,9 +66,6 @@ export default function AccountForm({ initial }: { initial: AccountInput }) {
   return (
     <div className="space-y-3.5">
       <section className="bg-[#141416] border border-white/[0.08] rounded-[34px] px-6 py-8 text-center shadow-[0_16px_36px_rgba(0,0,0,0.25)] space-y-3">
-        <div className="mx-auto w-16 h-16 rounded-full bg-[#baa3d0] text-[#141416] flex items-center justify-center font-editorial text-[28px]">
-          {initialLetter}
-        </div>
         <h1 className="font-editorial text-[36px] tracking-wide text-white leading-none">
           {profile.name.trim() || "Account"}
         </h1>
