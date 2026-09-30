@@ -91,6 +91,49 @@ export default function BottomBar() {
   }, [pathname, router]);
 
   useEffect(() => {
+    const isTab = (TAB_HREFS as readonly string[]).includes(pathname);
+    const isAuth = pathname === "/login" || pathname === "/register" || pathname.startsWith("/onboarding");
+    if (isTab || isAuth) return;
+
+    const atEdge = (x: number) => x < 28 || x > window.innerWidth - 28;
+
+    const onEdge = (event: TouchEvent) => {
+      if (event.touches.length !== 1) return;
+      const target = event.target;
+      if (target instanceof Element && target.closest("a, button, input, textarea, select")) return;
+      if (atEdge(event.touches[0].clientX)) event.preventDefault();
+    };
+
+    let lock = false;
+    const onStart = (event: TouchEvent) => {
+      lock = event.touches.length === 1 && atEdge(event.touches[0].clientX);
+    };
+    const onMove = (event: TouchEvent) => {
+      if (!lock) return;
+      event.preventDefault();
+    };
+
+    const here = window.location.pathname + window.location.search;
+    history.pushState({ repiqStay: true }, "", here);
+    const onPop = () => {
+      const now = window.location.pathname + window.location.search;
+      if (now !== here) history.pushState({ repiqStay: true }, "", here);
+    };
+
+    document.addEventListener("touchstart", onEdge, { passive: false, capture: true });
+    document.addEventListener("touchstart", onStart, { passive: true });
+    document.addEventListener("touchmove", onMove, { passive: false, capture: true });
+    window.addEventListener("popstate", onPop, true);
+
+    return () => {
+      document.removeEventListener("touchstart", onEdge, true);
+      document.removeEventListener("touchstart", onStart);
+      document.removeEventListener("touchmove", onMove, true);
+      window.removeEventListener("popstate", onPop, true);
+    };
+  }, [pathname]);
+
+  useEffect(() => {
     const index = TAB_HREFS.indexOf(pathname as (typeof TAB_HREFS)[number]);
     if (index === -1) return;
 
