@@ -15,7 +15,7 @@ export async function updatePlanName(planId: string, name: string) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) throw new Error("Niet ingelogd");
 
-  await (prisma as any).workoutPlan.update({
+  await prisma.workoutPlan.update({
     where: { id: planId, userId: session.user.id },
     data: { name: name.trim() },
   });

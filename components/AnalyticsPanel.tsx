@@ -1,5 +1,6 @@
 import { Trophy } from "lucide-react";
 import MonthCalendar from "@/components/MonthCalendar";
+import { exerciseProgress, type StrengthEntry, type TrackingMode } from "@/lib/strength";
 
 const TZ = "Europe/Amsterdam";
 
@@ -14,7 +15,7 @@ function dateKey(iso: string) {
 
 type Workout = {
   completedAt: string;
-  entries: { exerciseName: string; weight: number; reps: number }[];
+  entries: (StrengthEntry & { tracking: TrackingMode })[];
 };
 
 type WeightLog = { weight: number; loggedAt: string };
@@ -29,22 +30,7 @@ export default function AnalyticsPanel({
   const totalWorkouts = workouts.length;
   const workoutDates = workouts.map((workout) => dateKey(workout.completedAt));
   const todayKey = dateKey(new Date().toISOString());
-  const exerciseMaxMap = new Map<string, { weight: number; reps: number }>();
-
-  workouts.forEach((workout) => {
-    workout.entries.forEach((entry) => {
-      if (entry.weight <= 0) return;
-      const name = entry.exerciseName || "Oefening";
-      const current = exerciseMaxMap.get(name);
-      if (!current || entry.weight > current.weight || (entry.weight === current.weight && entry.reps > current.reps)) {
-        exerciseMaxMap.set(name, { weight: entry.weight, reps: entry.reps });
-      }
-    });
-  });
-
-  const topPRs = Array.from(exerciseMaxMap.entries())
-    .map(([name, best]) => ({ name, ...best }))
-    .sort((a, b) => b.weight - a.weight || b.reps - a.reps);
+  const topPRs = exerciseProgress(workouts);
 
   const latestWeight = weightLogs.at(-1)?.weight;
 
@@ -107,12 +93,19 @@ export default function AnalyticsPanel({
                   className="bg-[#1b1b1e] rounded-2xl px-4 py-3 flex items-center justify-between gap-3 border border-white/[0.04]"
                 >
                   <span className="text-[14px] font-medium text-white truncate">{pr.name}</span>
-                  <div className="flex items-baseline gap-1 shrink-0">
+                  <div className="flex items-baseline gap-1.5 shrink-0">
                     <span className="font-editorial text-[22px] text-[#baa3d0] tracking-wider leading-none">
-                      {pr.weight}
+                      {pr.unit === "kg" ? Number(pr.best.toFixed(1)) : Math.round(pr.best)}
                     </span>
-                    <span className="text-[11px] text-[#71717a] font-medium">kg</span>
-                    <span className="text-[11px] text-[#71717a] font-medium">× {pr.reps}</span>
+                    <span className="text-[11px] text-[#71717a] font-medium">
+                      {pr.unit === "kg" ? "e1RM" : pr.unit === "reps" ? "reps" : "sec"}
+                    </span>
+                    {pr.changePct != null && (
+                      <span className="text-[11px] text-white font-semibold">
+                        {pr.changePct > 0 ? "+" : ""}
+                        {Math.round(pr.changePct)}%
+                      </span>
+                    )}
                   </div>
                 </div>
               ))}

@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Plus, Trash2, Edit2, GripVertical } from "lucide-react";
+import { Plus, Trash2, Edit2, GripVertical, ChevronUp, ChevronDown } from "lucide-react";
 import {
   updatePlanName,
   addExerciseToPlan,
@@ -61,8 +61,10 @@ export default function PlanEditor({
   const [isEditingTitle, setIsEditingTitle] = useState(false);
 
   const [items, setItems] = useState(exercises);
-  const itemsRef = useRef(items);
-  itemsRef.current = items;
+  const itemsRef = useRef(exercises);
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
   const listRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
   const dragRef = useRef<DragState | null>(null);
@@ -159,6 +161,14 @@ export default function PlanEditor({
       return;
     }
 
+    const currentName = items.find((exercise) => exercise.id === editingId)?.name ?? "";
+    if (editName.trim() !== currentName) {
+      const confirmed = window.confirm(
+        "Deze naam geldt voor elk schema en alle eerdere logs van deze oefening. Doorgaan?"
+      );
+      if (!confirmed) return;
+    }
+
     const result = await updateExercise(planId, editingId, editName, sets, rest, editTracking);
     if (result?.error) {
       setEditError(result.error);
@@ -235,6 +245,21 @@ export default function PlanEditor({
     const reordered = [...itemsRef.current];
     const [moved] = reordered.splice(current.startIndex, 1);
     reordered.splice(current.overIndex, 0, moved);
+    itemsRef.current = reordered;
+    setItems(reordered);
+    const result = await reorderExercises(
+      planId,
+      reordered.map((exercise) => exercise.id)
+    );
+    if (result?.error) setItems(exercises);
+  }
+
+  async function moveItem(index: number, direction: -1 | 1) {
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= items.length) return;
+    const reordered = [...items];
+    const [moved] = reordered.splice(index, 1);
+    reordered.splice(nextIndex, 0, moved);
     itemsRef.current = reordered;
     setItems(reordered);
     const result = await reorderExercises(
@@ -502,8 +527,12 @@ export default function PlanEditor({
                       value={editName}
                       onChange={(e) => setEditName(e.target.value)}
                       autoFocus
+                      aria-label="Naam van de oefening"
                       className="w-full bg-[#141416] border border-white/[0.08] rounded-2xl px-4 py-3 text-[14px] text-white outline-none focus:border-[#baa3d0]"
                     />
+                    <p className="px-1 text-[12px] leading-snug text-[#baa3d0]">
+                      Een andere naam geldt voor elk schema en alle eerdere logs van deze oefening.
+                    </p>
                     <div className="grid grid-cols-3 gap-2">
                       {TRACKING_OPTIONS.map((option) => (
                         <button
@@ -569,6 +598,26 @@ export default function PlanEditor({
                       >
                         <GripVertical className="w-4 h-4" />
                       </button>
+                      <div className="flex flex-col">
+                        <button
+                          type="button"
+                          aria-label={`${ex.name} omhoog`}
+                          disabled={idx === 0}
+                          onClick={() => moveItem(idx, -1)}
+                          className="w-6 h-4 flex items-center justify-center text-[#71717a] disabled:opacity-30"
+                        >
+                          <ChevronUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`${ex.name} omlaag`}
+                          disabled={idx === items.length - 1}
+                          onClick={() => moveItem(idx, 1)}
+                          className="w-6 h-4 flex items-center justify-center text-[#71717a] disabled:opacity-30"
+                        >
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                       <button
                         type="button"
                         onClick={() => setOpenId((current) => (current === ex.id ? null : ex.id))}

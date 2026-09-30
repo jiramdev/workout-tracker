@@ -80,8 +80,6 @@ export const viewport: Viewport = {
   colorScheme: "light",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
 };
 
 export default function RootLayout({
@@ -135,6 +133,10 @@ export default function RootLayout({
             width: 0%;
             border-radius: 999px;
             background: #141416;
+            transition: width 200ms ease-out;
+          }
+          @media (prefers-reduced-motion: reduce) {
+            #boot-bar { transition: none; }
           }
         `}</style>
         <div id="boot-splash" aria-hidden="true">

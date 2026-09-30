@@ -39,6 +39,7 @@ export default async function ActiveWorkoutPage({ searchParams }: PageProps) {
           </>
         ) : (
           <ActiveWorkoutLogger
+            userId={session.user.id}
             planId={planId}
             exercises={workout.exercises}
             previousSets={workout.previousSets}

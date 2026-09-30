@@ -15,7 +15,6 @@ const dayNamesNL = [
 
 export default function HomePanel({
   displayName,
-  image,
   dayOfWeek,
   todayPlan,
   sessionCount,
@@ -23,7 +22,6 @@ export default function HomePanel({
   unreadCount,
 }: {
   displayName: string;
-  image?: string | null;
   dayOfWeek: number;
   todayPlan: { id: string; name: string; exerciseCount: number } | null;
   sessionCount: number;
@@ -42,17 +40,9 @@ export default function HomePanel({
             href="/account"
             className="h-10 bg-[#141416] border border-white/[0.08] pl-1.5 pr-4 rounded-full flex items-center gap-2.5 shadow-[0_4px_12px_rgba(0,0,0,0.15)] transition apple-press"
           >
-            {image ? (
-              <img
-                src={image}
-                alt={displayName}
-                className="w-7 h-7 rounded-full object-cover border border-white/10"
-              />
-            ) : (
-              <div className="w-7 h-7 rounded-full bg-[#baa3d0] text-[#141416] flex items-center justify-center font-bold text-[12px] uppercase">
-                {userInitial}
-              </div>
-            )}
+            <div className="w-7 h-7 rounded-full bg-[#baa3d0] text-[#141416] flex items-center justify-center font-bold text-[12px] uppercase">
+              {userInitial}
+            </div>
             <span className="font-editorial text-[14px] tracking-wider text-white leading-none uppercase">
               {displayName}
             </span>

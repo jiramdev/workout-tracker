@@ -7,7 +7,7 @@ const { findUnique, findMany } = vi.hoisted(() => ({
 
 vi.mock("@/lib/prisma", () => ({
   default: {
-    user: { findUnique },
+    restTimer: { findUnique, delete: vi.fn() },
     pushSubscription: { findMany, delete: vi.fn() },
   },
 }));

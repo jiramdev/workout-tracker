@@ -26,7 +26,8 @@ export async function GET(req: Request) {
 
   const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   const privateKey = process.env.VAPID_PRIVATE_KEY;
-  if (!publicKey || !privateKey) {
+  const subject = process.env.VAPID_SUBJECT;
+  if (!publicKey || !privateKey || !subject) {
     return NextResponse.json({ error: "VAPID niet ingesteld" }, { status: 500 });
   }
 
@@ -61,11 +62,7 @@ export async function GET(req: Request) {
   });
   if (subscriptions.length === 0) return NextResponse.json({ sent: 0 });
 
-  webpush.setVapidDetails(
-    process.env.VAPID_SUBJECT || "mailto:marijn.snoeren@gmail.com",
-    publicKey,
-    privateKey
-  );
+  webpush.setVapidDetails(subject, publicKey, privateKey);
 
   const dedupeKey = `morning:${dateKey}`;
   const alreadySent = await prisma.appNotification.findMany({
@@ -118,7 +115,7 @@ export async function GET(req: Request) {
             endpoint: subscription.endpoint,
             keys: { p256dh: subscription.p256dh, auth: subscription.auth },
           },
-          JSON.stringify({ title: "Vandaag", body, url: href }),
+          JSON.stringify({ title: "Vandaag", body, url: href, tag: "morning" }),
           { urgency: "high", TTL: 60 * 60 * 12 }
         );
         sent += 1;

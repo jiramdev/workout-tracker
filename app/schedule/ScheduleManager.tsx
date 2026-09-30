@@ -109,7 +109,7 @@ export default function ScheduleManager({ plans, initialDays }: ScheduleManagerP
       <section className="bg-[#141416] border border-white/[0.08] rounded-[30px] p-5 space-y-3 shadow-[0_12px_28px_rgba(0,0,0,0.2)]">
         <div className="flex items-center justify-between px-1">
           <span className="text-[11px] font-semibold tracking-[0.18em] text-[#baa3d0] uppercase">
-            Mijn Schema's
+            {"Mijn Schema's"}
           </span>
           <button
             type="button"
@@ -153,7 +153,7 @@ export default function ScheduleManager({ plans, initialDays }: ScheduleManagerP
         <div className="space-y-2 pt-1">
           {plans.length === 0 ? (
             <div className="bg-[#1b1b1e] rounded-2xl px-4 py-3 flex items-center justify-between border border-white/[0.04]">
-              <span className="text-[14px] font-medium text-[#71717a]">Nog geen schema's</span>
+              <span className="text-[14px] font-medium text-[#71717a]">{"Nog geen schema's"}</span>
             </div>
           ) : (
             plans.map((p) => (
