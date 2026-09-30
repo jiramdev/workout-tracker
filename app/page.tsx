@@ -26,7 +26,7 @@ export default async function HomePage() {
     await Promise.all([
       getDashboard(session.user.id),
       prisma.appNotification.count({
-        where: { userId: session.user.id, read: false },
+        where: { userId: session.user.id, read: false, title: { not: "Rust voorbij" } },
       }),
     ]);
 

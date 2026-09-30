@@ -2,9 +2,14 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { syncExistingPushSubscription } from "@/lib/enable-notifications";
 
 export default function OpenFromNotification() {
   const router = useRouter();
+
+  useEffect(() => {
+    syncExistingPushSubscription().catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;

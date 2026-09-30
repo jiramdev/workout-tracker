@@ -1,59 +1,93 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { enableNotifications } from "@/lib/enable-notifications";
-
-type Status = NotificationPermission | "unsupported" | "loading";
+import { useLayoutEffect, useState } from "react";
+import { disableNotifications, enableNotifications } from "@/lib/enable-notifications";
 
 export default function NotificationSettings() {
-  const [status, setStatus] = useState<Status>("loading");
-  const [asking, setAsking] = useState(false);
+  const [on, setOn] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [blocked, setBlocked] = useState(false);
+  const [unsupported, setUnsupported] = useState(false);
+  const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    if (!("Notification" in window)) {
-      setStatus("unsupported");
-      return;
-    }
-    setStatus(Notification.permission);
+  useLayoutEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+        if (!cancelled) {
+          setUnsupported(true);
+          setReady(true);
+        }
+        return;
+      }
+
+      const registration = await navigator.serviceWorker.getRegistration();
+      const subscription = registration ? await registration.pushManager.getSubscription() : null;
+      if (cancelled) return;
+      setBlocked(Notification.permission === "denied");
+      setOn(Notification.permission === "granted" && subscription != null);
+      setReady(true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  async function ask() {
-    setAsking(true);
-    const result = await enableNotifications();
-    setStatus(result === "granted" ? "granted" : result === "unsupported" ? "unsupported" : "denied");
-    setAsking(false);
+  async function toggle() {
+    if (!ready || busy || unsupported) return;
+    if (!on && typeof Notification !== "undefined" && Notification.permission === "denied") {
+      setBlocked(true);
+      return;
+    }
+
+    setBusy(true);
+    if (on) {
+      await disableNotifications();
+      setOn(false);
+      setBlocked(false);
+    } else {
+      const result = await enableNotifications();
+      setOn(result === "granted");
+      setBlocked(result === "denied");
+      setUnsupported(result === "unsupported");
+    }
+    setBusy(false);
   }
 
-  const enabled = status === "granted";
-
   return (
-    <section className="bg-[#141416] border border-white/[0.08] rounded-[30px] p-5 space-y-3 shadow-[0_12px_28px_rgba(0,0,0,0.2)]">
-      <span className="text-[11px] font-semibold tracking-[0.18em] text-[#baa3d0] uppercase px-1">
-        Meldingen
-      </span>
-      <p className="px-1 text-[13px] text-[#a1a1aa]">
-        Krijg een seintje als je rust voorbij is.
-      </p>
-      <p className="px-1 text-[13px] text-white">
-        {status === "loading"
-          ? "Status laden..."
-          : status === "unsupported"
-            ? "Deze browser ondersteunt geen meldingen."
-            : enabled
-              ? "Meldingen staan aan."
-              : status === "denied"
-                ? "Meldingen zijn geblokkeerd in je browser."
-                : "Meldingen staan uit."}
-      </p>
-      {!enabled && status !== "unsupported" && status !== "denied" && status !== "loading" && (
+    <section className="bg-[#141416] border border-white/[0.08] rounded-[30px] px-5 py-4 shadow-[0_12px_28px_rgba(0,0,0,0.2)]">
+      <div className="flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <p className="font-editorial text-[20px] tracking-wide text-white leading-none">Meldingen</p>
+          <p className="mt-2 text-[13px] text-[#a1a1aa]">
+            Elke ochtend een seintje als er een training gepland staat.
+          </p>
+        </div>
         <button
           type="button"
-          onClick={ask}
-          disabled={asking}
-          className="w-full bg-[#baa3d0] text-[#141416] rounded-full py-3.5 font-editorial text-[18px] tracking-wider disabled:opacity-50 apple-press"
+          role="switch"
+          aria-checked={on}
+          aria-label="Meldingen"
+          disabled={!ready || busy || unsupported}
+          onClick={toggle}
+          className={`relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-40 ${
+            on ? "bg-[#baa3d0]" : "bg-white/10"
+          }`}
         >
-          {asking ? "VRAGEN..." : "MELDINGEN AANZETTEN"}
+          <span
+            className={`absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${
+              on ? "translate-x-5" : "translate-x-0"
+            }`}
+          />
         </button>
+      </div>
+      {unsupported && (
+        <p className="mt-3 text-[13px] text-[#a1a1aa]">Deze browser ondersteunt geen meldingen.</p>
+      )}
+      {blocked && !on && (
+        <p className="mt-3 text-[13px] text-[#a1a1aa]">Meldingen zijn geblokkeerd in je browser.</p>
       )}
     </section>
   );

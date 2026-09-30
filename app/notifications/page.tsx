@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
+import NotificationSettings from "@/components/NotificationSettings";
 import NotificationList from "./NotificationList";
 
 export default async function NotificationsPage() {
@@ -11,7 +12,7 @@ export default async function NotificationsPage() {
   if (!session?.user?.id) redirect("/login");
 
   const notifications = await prisma.appNotification.findMany({
-    where: { userId: session.user.id },
+    where: { userId: session.user.id, title: { not: "Rust voorbij" } },
     orderBy: { createdAt: "desc" },
     take: 40,
     select: {
@@ -43,6 +44,8 @@ export default async function NotificationsPage() {
             </span>
           </div>
         </header>
+
+        <NotificationSettings />
 
         <NotificationList
           items={notifications.map((item) => ({

@@ -20,8 +20,9 @@ model User {
   workoutPlans WorkoutPlan[]
   schedule     WeeklySchedule?
   workoutLogs  WorkoutLog[]
-  weightLogs   BodyWeightLog[]
+  weightLogs    BodyWeightLog[]
   notifications AppNotification[]
+  pushSubscriptions PushSubscription[]
 }
 
 model WorkoutPlan {
@@ -91,9 +92,23 @@ model AppNotification {
   body      String
   href      String?
   read      Boolean  @default(false)
+  dedupeKey String?
   createdAt DateTime @default(now())
 
+  @@index([userId, dedupeKey])
   @@index([userId, createdAt])
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model BodyWeightLog {

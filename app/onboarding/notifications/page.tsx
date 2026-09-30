@@ -25,13 +25,13 @@ export default function NotificationPromptPage() {
         <div className="text-center pb-1">
           <h1 className="font-editorial text-[52px] text-[#141416] leading-none">Meldingen</h1>
           <p className="mt-3 text-[14px] font-medium text-[#141416]/70">
-            Een seintje als je rust voorbij is.
+            Een seintje in de ochtend als er een training gepland staat.
           </p>
         </div>
 
         <section className="bg-[#141416] border border-white/[0.08] rounded-[34px] p-6 space-y-4 shadow-[0_16px_36px_rgba(0,0,0,0.25)] text-center">
           <p className="text-[14px] text-[#a1a1aa]">
-            repiq kan je waarschuwen wanneer de rust tussen sets voorbij is, ook als de app op de achtergrond staat.
+            Zet meldingen aan en je krijgt om 8 uur een seintje met de training die die dag op het schema staat.
           </p>
           <button
             type="button"

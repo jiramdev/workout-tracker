@@ -41,7 +41,7 @@ export default function NotificationList({ items }: { items: NotificationItem[] 
       <section className="bg-[#141416] border border-white/[0.08] rounded-[34px] px-6 py-12 text-center shadow-[0_16px_36px_rgba(0,0,0,0.25)]">
         <p className="font-editorial text-[28px] text-white leading-none">Stil</p>
         <p className="mt-3 text-[13px] text-[#a1a1aa]">
-          Nog geen meldingen. Een seintje als je rust voorbij is verschijnt hier.
+          Nog geen meldingen. In de ochtend verschijnt hier de training van die dag.
         </p>
       </section>
     );
