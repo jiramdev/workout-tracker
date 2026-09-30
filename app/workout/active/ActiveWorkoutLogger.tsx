@@ -13,10 +13,15 @@ interface Exercise {
   restSeconds?: number;
 }
 
+interface PreviousSet {
+  weight: number;
+  reps: number;
+}
+
 interface ActiveWorkoutLoggerProps {
   planId?: string | null;
   exercises: Exercise[];
-  previousLogsMap: Record<string, { weight: number; reps: number }>;
+  previousSets: Record<string, PreviousSet[]>;
 }
 
 interface SetRow {
@@ -28,7 +33,7 @@ interface SetRow {
 
 const STORAGE_TARGET_KEY = "active_workout_rest_target";
 const STORAGE_EXERCISE_KEY = "active_workout_rest_exercise";
-const STORAGE_SETS_KEY = "active_workout_sets_data";
+const STORAGE_SETS_KEY = "active_workout_sets_data_v2";
 const STORAGE_START_KEY = "active_workout_started_at";
 const EMPTY_ROWS: SetRow[] = [];
 
@@ -147,13 +152,13 @@ function RestTimer({
 const ExerciseSection = memo(function ExerciseSection({
   exercise,
   rows,
-  previous,
+  previousSets,
   onUpdate,
   onToggle,
 }: {
   exercise: Exercise;
   rows: SetRow[];
-  previous?: { weight: number; reps: number };
+  previousSets?: PreviousSet[];
   onUpdate: (
     exerciseName: string,
     setIndex: number,
@@ -185,6 +190,7 @@ const ExerciseSection = memo(function ExerciseSection({
       <div className="space-y-2">
         {rows.map((row, idx) => {
           const isDone = row.isCompleted;
+          const previous = previousSets?.[idx];
 
           return (
             <div
@@ -202,21 +208,21 @@ const ExerciseSection = memo(function ExerciseSection({
               <input
                 type="number"
                 inputMode="decimal"
-                placeholder={previous?.weight ? String(previous.weight) : "0"}
+                placeholder={previous ? String(previous.weight) : "—"}
                 value={row.weight}
                 disabled={isDone}
                 onChange={(e) => onUpdate(exercise.name, idx, "weight", e.target.value)}
-                className="w-full bg-[#121214] border border-white/[0.06] rounded-xl py-2 text-center font-mono text-[15px] font-medium text-white outline-none focus:border-[#baa3d0] disabled:opacity-40"
+                className="w-full bg-[#121214] border border-white/[0.06] rounded-xl py-2 text-center font-mono text-[15px] font-medium text-white outline-none placeholder:text-[#71717a] focus:border-[#baa3d0] disabled:opacity-40"
               />
 
               <input
                 type="number"
                 inputMode="numeric"
-                placeholder={previous?.reps ? String(previous.reps) : "10"}
+                placeholder={previous ? String(previous.reps) : "—"}
                 value={row.reps}
                 disabled={isDone}
                 onChange={(e) => onUpdate(exercise.name, idx, "reps", e.target.value)}
-                className="w-full bg-[#121214] border border-white/[0.06] rounded-xl py-2 text-center font-mono text-[15px] font-medium text-white outline-none focus:border-[#baa3d0] disabled:opacity-40"
+                className="w-full bg-[#121214] border border-white/[0.06] rounded-xl py-2 text-center font-mono text-[15px] font-medium text-white outline-none placeholder:text-[#71717a] focus:border-[#baa3d0] disabled:opacity-40"
               />
 
               <button
@@ -238,10 +244,20 @@ const ExerciseSection = memo(function ExerciseSection({
   );
 });
 
+function setsStorageKey(planId?: string | null) {
+  return `${STORAGE_SETS_KEY}:${planId ?? "none"}`;
+}
+
+function loggedNumber(typed: string, previous: number | undefined, asInteger = false) {
+  if (typed.trim() === "") return previous ?? 0;
+  const parsed = asInteger ? parseInt(typed, 10) : Number(typed);
+  return Number.isFinite(parsed) ? parsed : previous ?? 0;
+}
+
 export default function ActiveWorkoutLogger({
   planId,
   exercises,
-  previousLogsMap,
+  previousSets = {},
 }: ActiveWorkoutLoggerProps) {
   const router = useRouter();
 
@@ -262,7 +278,7 @@ export default function ActiveWorkoutLogger({
 
   const [setsData, setSetsData] = useState<Record<string, SetRow[]>>(() => {
     if (typeof window !== "undefined") {
-      const saved = localStorage.getItem(STORAGE_SETS_KEY);
+      const saved = localStorage.getItem(setsStorageKey(planId));
       if (saved) {
         try {
           return JSON.parse(saved);
@@ -274,11 +290,10 @@ export default function ActiveWorkoutLogger({
 
     const initial: Record<string, SetRow[]> = {};
     exercises.forEach((ex) => {
-      const prev = previousLogsMap[ex.name];
       initial[ex.name] = Array.from({ length: ex.targetSets || 3 }, (_, idx) => ({
         setNumber: idx + 1,
-        weight: prev?.weight ? String(prev.weight) : "",
-        reps: prev?.reps ? String(prev.reps) : "10",
+        weight: "",
+        reps: "",
         isCompleted: false,
       }));
     });
@@ -296,8 +311,8 @@ export default function ActiveWorkoutLogger({
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_SETS_KEY, JSON.stringify(setsData));
-  }, [setsData]);
+    localStorage.setItem(setsStorageKey(planId), JSON.stringify(setsData));
+  }, [planId, setsData]);
 
   const scheduleServerPush = useCallback(
     (seconds: number, exerciseName: string) => {
@@ -409,8 +424,8 @@ export default function ActiveWorkoutLogger({
         .map((r) => ({
           exerciseName,
           setNumber: r.setNumber,
-          weight: parseFloat(r.weight) || 0,
-          reps: parseInt(r.reps, 10) || 0,
+          weight: loggedNumber(r.weight, previousSets[exerciseName]?.[r.setNumber - 1]?.weight),
+          reps: loggedNumber(r.reps, previousSets[exerciseName]?.[r.setNumber - 1]?.reps, true),
         }))
     );
 
@@ -419,7 +434,8 @@ export default function ActiveWorkoutLogger({
     }
 
     clearTimer();
-    localStorage.removeItem(STORAGE_SETS_KEY);
+    localStorage.removeItem(setsStorageKey(planId));
+    localStorage.removeItem("active_workout_sets_data");
     localStorage.removeItem(STORAGE_START_KEY);
 
     setIsFinishing(true);
@@ -441,7 +457,7 @@ export default function ActiveWorkoutLogger({
           key={ex.id}
           exercise={ex}
           rows={setsData[ex.name] ?? EMPTY_ROWS}
-          previous={previousLogsMap[ex.name]}
+          previousSets={previousSets[ex.name]}
           onUpdate={handleUpdate}
           onToggle={handleToggleSet}
         />

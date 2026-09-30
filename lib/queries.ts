@@ -112,7 +112,7 @@ export function getSchedule(userId: string) {
 }
 
 export function getActiveWorkout(userId: string, planId?: string) {
-  return cached(userId, `active:${planId ?? "none"}`, async () => {
+  return cached(userId, `active-sets:${planId ?? "none"}`, async () => {
     const [plan, latestWorkout] = await Promise.all([
       planId
         ? prisma.workoutPlan.findFirst({
@@ -131,29 +131,31 @@ export function getActiveWorkout(userId: string, planId?: string) {
           })
         : Promise.resolve(null),
       prisma.workoutLog.findFirst({
-        where: { userId, completedAt: { not: null } },
+        where: {
+          userId,
+          completedAt: { not: null },
+          ...(planId ? { planId } : {}),
+        },
         orderBy: { completedAt: "desc" },
         select: {
           entries: {
-            select: { exerciseName: true, weight: true, reps: true },
+            orderBy: { setNumber: "asc" },
+            select: { exerciseName: true, setNumber: true, weight: true, reps: true },
           },
         },
       }),
     ]);
 
-    const previousLogsMap: Record<string, { weight: number; reps: number }> = {};
+    const previousSets: Record<string, { weight: number; reps: number }[]> = {};
     for (const entry of latestWorkout?.entries ?? []) {
-      if (!previousLogsMap[entry.exerciseName]) {
-        previousLogsMap[entry.exerciseName] = {
-          weight: entry.weight,
-          reps: entry.reps,
-        };
-      }
+      const sets = previousSets[entry.exerciseName] ?? [];
+      sets[entry.setNumber - 1] = { weight: entry.weight, reps: entry.reps };
+      previousSets[entry.exerciseName] = sets;
     }
 
     return {
       exercises: plan?.exercises ?? [],
-      previousLogsMap,
+      previousSets,
     };
   });
 }

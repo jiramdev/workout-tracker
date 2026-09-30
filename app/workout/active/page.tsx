@@ -49,7 +49,7 @@ export default async function ActiveWorkoutPage({ searchParams }: PageProps) {
         <ActiveWorkoutLogger
           planId={planId}
           exercises={exercises}
-          previousLogsMap={workout.previousLogsMap}
+          previousSets={workout.previousSets}
         />
       </main>
     </div>
