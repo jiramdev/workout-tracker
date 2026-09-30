@@ -1,7 +1,7 @@
 // app/workout/active/ActiveWorkoutLogger.tsx
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, X, Plus } from "lucide-react";
 import { finishWorkout } from "./actions";
@@ -30,6 +30,7 @@ const STORAGE_TARGET_KEY = "active_workout_rest_target";
 const STORAGE_EXERCISE_KEY = "active_workout_rest_exercise";
 const STORAGE_SETS_KEY = "active_workout_sets_data";
 const STORAGE_START_KEY = "active_workout_started_at";
+const EMPTY_ROWS: SetRow[] = [];
 
 function urlBase64ToUint8Array(base64String: string) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -42,6 +43,199 @@ function urlBase64ToUint8Array(base64String: string) {
   return outputArray;
 }
 
+function readRestTarget() {
+  if (typeof window === "undefined") return null;
+  const stored = localStorage.getItem(STORAGE_TARGET_KEY);
+  if (!stored) return null;
+  const target = parseInt(stored, 10);
+  if (!target || target <= Date.now()) {
+    localStorage.removeItem(STORAGE_TARGET_KEY);
+    localStorage.removeItem(STORAGE_EXERCISE_KEY);
+    return null;
+  }
+  return target;
+}
+
+function RestTimer({
+  target,
+  onAdd,
+  onExpire,
+}: {
+  target: number | null;
+  onAdd: () => void;
+  onExpire: () => void;
+}) {
+  const [secondsRemaining, setSecondsRemaining] = useState<number | null>(null);
+  const onExpireRef = useRef(onExpire);
+  onExpireRef.current = onExpire;
+
+  useEffect(() => {
+    if (target == null) {
+      setSecondsRemaining(null);
+      return;
+    }
+
+    let stopped = false;
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((target - Date.now()) / 1000));
+      if (remaining <= 0) {
+        if (!stopped) {
+          stopped = true;
+          setSecondsRemaining(null);
+          onExpireRef.current();
+        }
+        return;
+      }
+      setSecondsRemaining((current) => (current === remaining ? current : remaining));
+    };
+
+    tick();
+    const interval = setInterval(tick, 1000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    window.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", tick);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", tick);
+    };
+  }, [target]);
+
+  if (secondsRemaining == null) return null;
+
+  return (
+    <div className="fixed top-4 left-0 right-0 z-[999] flex justify-center px-4 pointer-events-none">
+      <div className="pointer-events-auto bg-[#141416] border border-[#baa3d0]/40 rounded-full pl-5 pr-3 py-2 flex items-center gap-4 shadow-[0_16px_36px_rgba(0,0,0,0.6)]">
+        <div className="flex items-baseline gap-2">
+          <span className="font-editorial text-[24px] tracking-wider text-[#baa3d0] leading-none">
+            {Math.floor(secondsRemaining / 60)}:
+            {(secondsRemaining % 60).toString().padStart(2, "0")}
+          </span>
+          <span className="text-[10px] font-semibold tracking-wider text-[#a1a1aa] uppercase">
+            Rust
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onAdd}
+            className="h-8 px-2.5 rounded-full bg-white/[0.08] hover:bg-white/[0.14] text-white text-[11px] font-semibold flex items-center gap-1 transition apple-press"
+          >
+            <Plus className="w-3 h-3 text-[#baa3d0]" />
+            30s
+          </button>
+
+          <button
+            type="button"
+            onClick={onExpire}
+            className="w-8 h-8 rounded-full bg-white/[0.08] hover:bg-white/[0.14] text-[#a1a1aa] hover:text-white flex items-center justify-center transition apple-press"
+          >
+            <X className="w-3.5 h-3.5 stroke-[2.5]" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const ExerciseSection = memo(function ExerciseSection({
+  exercise,
+  rows,
+  previous,
+  onUpdate,
+  onToggle,
+}: {
+  exercise: Exercise;
+  rows: SetRow[];
+  previous?: { weight: number; reps: number };
+  onUpdate: (
+    exerciseName: string,
+    setIndex: number,
+    field: "weight" | "reps",
+    value: string
+  ) => void;
+  onToggle: (exerciseName: string, setIndex: number, restDuration: number) => void;
+}) {
+  const restDuration = exercise.restSeconds || 90;
+
+  return (
+    <section className="bg-[#141416] border border-white/[0.08] rounded-[30px] p-5 space-y-3 shadow-[0_12px_28px_rgba(0,0,0,0.2)]">
+      <div className="flex items-center justify-between px-1">
+        <h2 className="font-editorial text-[22px] tracking-wide text-white leading-none">
+          {exercise.name}
+        </h2>
+        <span className="text-[11px] font-semibold tracking-[0.18em] text-[#baa3d0] uppercase">
+          {rows.length} {rows.length === 1 ? "SET" : "SETS"}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-[28px_1fr_1fr_36px] gap-2.5 px-2 text-[10px] uppercase font-semibold text-[#71717a] text-center">
+        <span>#</span>
+        <span>KG</span>
+        <span>REPS</span>
+        <span></span>
+      </div>
+
+      <div className="space-y-2">
+        {rows.map((row, idx) => {
+          const isDone = row.isCompleted;
+
+          return (
+            <div
+              key={row.setNumber}
+              className={`grid grid-cols-[28px_1fr_1fr_36px] gap-2.5 items-center rounded-2xl px-2 py-1.5 transition ${
+                isDone
+                  ? "bg-[#1d1d22] border border-white/[0.06]"
+                  : "bg-[#18181b] border border-transparent"
+              }`}
+            >
+              <span className="text-center font-editorial text-[16px] text-[#71717a]">
+                {row.setNumber}
+              </span>
+
+              <input
+                type="number"
+                inputMode="decimal"
+                placeholder={previous?.weight ? String(previous.weight) : "0"}
+                value={row.weight}
+                disabled={isDone}
+                onChange={(e) => onUpdate(exercise.name, idx, "weight", e.target.value)}
+                className="w-full bg-[#121214] border border-white/[0.06] rounded-xl py-2 text-center font-mono text-[15px] font-medium text-white outline-none focus:border-[#baa3d0] disabled:opacity-40"
+              />
+
+              <input
+                type="number"
+                inputMode="numeric"
+                placeholder={previous?.reps ? String(previous.reps) : "10"}
+                value={row.reps}
+                disabled={isDone}
+                onChange={(e) => onUpdate(exercise.name, idx, "reps", e.target.value)}
+                className="w-full bg-[#121214] border border-white/[0.06] rounded-xl py-2 text-center font-mono text-[15px] font-medium text-white outline-none focus:border-[#baa3d0] disabled:opacity-40"
+              />
+
+              <button
+                type="button"
+                onClick={() => onToggle(exercise.name, idx, restDuration)}
+                className={`w-9 h-9 rounded-full flex items-center justify-center transition apple-press ${
+                  isDone
+                    ? "bg-[#baa3d0] text-[#141416]"
+                    : "border border-white/20 text-transparent hover:border-[#baa3d0] hover:text-[#baa3d0]"
+                }`}
+              >
+                <Check className="w-4 h-4 stroke-[3]" />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+});
+
 export default function ActiveWorkoutLogger({
   planId,
   exercises,
@@ -49,7 +243,6 @@ export default function ActiveWorkoutLogger({
 }: ActiveWorkoutLoggerProps) {
   const router = useRouter();
 
-  // Begintijd ophalen of instellen
   const [startedAt] = useState<string>(() => {
     if (typeof window !== "undefined") {
       const savedStart = localStorage.getItem(STORAGE_START_KEY);
@@ -62,10 +255,9 @@ export default function ActiveWorkoutLogger({
   });
 
   const [isFinishing, setIsFinishing] = useState(false);
-  const [secondsRemaining, setSecondsRemaining] = useState<number | null>(null);
-  const swReadyRef = useRef<ServiceWorkerRegistration | null>(null);
+  const [restTarget, setRestTarget] = useState<number | null>(null);
+  const setsRef = useRef<Record<string, SetRow[]>>({});
 
-  // Initialiseren: direct uit localStorage laden zodat vinkjes en gewichten bewaard blijven
   const [setsData, setSetsData] = useState<Record<string, SetRow[]>>(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem(STORAGE_SETS_KEY);
@@ -91,44 +283,16 @@ export default function ActiveWorkoutLogger({
     return initial;
   });
 
-  // Bewaar wijzigingen direct in localStorage
+  setsRef.current = setsData;
+
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem(STORAGE_SETS_KEY, JSON.stringify(setsData));
-    }
+    setRestTarget(readRestTarget());
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_SETS_KEY, JSON.stringify(setsData));
   }, [setsData]);
 
-  // Service Worker registreren bij opstarten
-  useEffect(() => {
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.ready.then((reg) => {
-        swReadyRef.current = reg;
-      });
-    }
-  }, []);
-
-  // Timer synchronisatie vanuit absolute timestamp
-  const checkTimerSync = useCallback(() => {
-    if (typeof window === "undefined") return;
-    const storedTarget = localStorage.getItem(STORAGE_TARGET_KEY);
-    if (!storedTarget) {
-      setSecondsRemaining(null);
-      return;
-    }
-
-    const targetTime = parseInt(storedTarget, 10);
-    const remaining = Math.max(0, Math.ceil((targetTime - Date.now()) / 1000));
-
-    if (remaining <= 0) {
-      localStorage.removeItem(STORAGE_TARGET_KEY);
-      localStorage.removeItem(STORAGE_EXERCISE_KEY);
-      setSecondsRemaining(null);
-    } else {
-      setSecondsRemaining(remaining);
-    }
-  }, []);
-
-  // Achtergrond push registratie via QStash & APNs (niet-blokkerend voor de UI)
   const scheduleServerPush = useCallback(
     (seconds: number, exerciseName: string) => {
       if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
@@ -164,92 +328,73 @@ export default function ActiveWorkoutLogger({
     [planId]
   );
 
-  // Rusttimer activeren
-  const startRestTimer = (seconds: number, exerciseName: string) => {
-    if (typeof window !== "undefined" && "Notification" in window) {
-      if (Notification.permission === "default") {
-        Notification.requestPermission();
+  const clearTimer = useCallback(() => {
+    localStorage.removeItem(STORAGE_TARGET_KEY);
+    localStorage.removeItem(STORAGE_EXERCISE_KEY);
+    setRestTarget(null);
+  }, []);
+
+  const startRestTimer = useCallback(
+    (seconds: number, exerciseName: string) => {
+      if (typeof window !== "undefined" && "Notification" in window) {
+        if (Notification.permission === "default") {
+          Notification.requestPermission();
+        }
       }
-    }
 
-    const targetTimestamp = Date.now() + seconds * 1000;
-    localStorage.setItem(STORAGE_TARGET_KEY, targetTimestamp.toString());
-    localStorage.setItem(STORAGE_EXERCISE_KEY, exerciseName);
-    setSecondsRemaining(seconds);
+      const targetTimestamp = Date.now() + seconds * 1000;
+      localStorage.setItem(STORAGE_TARGET_KEY, targetTimestamp.toString());
+      localStorage.setItem(STORAGE_EXERCISE_KEY, exerciseName);
+      setRestTarget(targetTimestamp);
+      scheduleServerPush(seconds, exerciseName);
+    },
+    [scheduleServerPush]
+  );
 
-    scheduleServerPush(seconds, exerciseName);
-  };
-
-  const addTime = (extraSeconds: number) => {
+  const addTime = useCallback(() => {
     const storedTarget = localStorage.getItem(STORAGE_TARGET_KEY);
     const exerciseName = localStorage.getItem(STORAGE_EXERCISE_KEY) || "";
     const base = storedTarget ? parseInt(storedTarget, 10) : Date.now();
-    const newTarget = Math.max(Date.now(), base) + extraSeconds * 1000;
+    const newTarget = Math.max(Date.now(), base) + 30 * 1000;
 
     localStorage.setItem(STORAGE_TARGET_KEY, newTarget.toString());
-    checkTimerSync();
+    setRestTarget(newTarget);
 
     const remainingSecs = Math.max(1, Math.ceil((newTarget - Date.now()) / 1000));
     scheduleServerPush(remainingSecs, exerciseName);
-  };
+  }, [scheduleServerPush]);
 
-  const cancelTimer = () => {
-    localStorage.removeItem(STORAGE_TARGET_KEY);
-    localStorage.removeItem(STORAGE_EXERCISE_KEY);
-    setSecondsRemaining(null);
-  };
+  const handleUpdate = useCallback(
+    (exerciseName: string, setIndex: number, field: "weight" | "reps", value: string) => {
+      setSetsData((prev) => {
+        const rows = prev[exerciseName];
+        if (!rows) return prev;
+        const nextRows = [...rows];
+        nextRows[setIndex] = { ...nextRows[setIndex], [field]: value };
+        return { ...prev, [exerciseName]: nextRows };
+      });
+    },
+    []
+  );
 
-  // Efficiënte 1-seconde loop: stopt automatisch wanneer er geen timer loopt
-  useEffect(() => {
-    const hasTarget = typeof window !== "undefined" && !!localStorage.getItem(STORAGE_TARGET_KEY);
-    if (!hasTarget && secondsRemaining === null) return;
+  const handleToggleSet = useCallback(
+    (exerciseName: string, setIndex: number, restDuration: number = 90) => {
+      const current = setsRef.current[exerciseName]?.[setIndex];
+      if (!current) return;
+      const nextState = !current.isCompleted;
 
-    checkTimerSync();
-    const interval = setInterval(checkTimerSync, 1000);
+      setSetsData((prev) => {
+        const rows = prev[exerciseName];
+        if (!rows) return prev;
+        const nextRows = [...rows];
+        nextRows[setIndex] = { ...nextRows[setIndex], isCompleted: nextState };
+        return { ...prev, [exerciseName]: nextRows };
+      });
 
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") checkTimerSync();
-    };
-
-    window.addEventListener("visibilitychange", handleVisibility);
-    window.addEventListener("focus", checkTimerSync);
-
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener("visibilitychange", handleVisibility);
-      window.removeEventListener("focus", checkTimerSync);
-    };
-  }, [checkTimerSync, secondsRemaining]);
-
-  const handleUpdate = (
-    exerciseName: string,
-    setIndex: number,
-    field: "weight" | "reps",
-    value: string
-  ) => {
-    setSetsData((prev) => {
-      const rows = [...prev[exerciseName]];
-      rows[setIndex] = { ...rows[setIndex], [field]: value };
-      return { ...prev, [exerciseName]: rows };
-    });
-  };
-
-  const handleToggleSet = (
-    exerciseName: string,
-    setIndex: number,
-    restDuration: number = 90
-  ) => {
-    setSetsData((prev) => {
-      const rows = [...prev[exerciseName]];
-      const nextState = !rows[setIndex].isCompleted;
-      rows[setIndex] = { ...rows[setIndex], isCompleted: nextState };
-
-      if (nextState) {
-        startRestTimer(restDuration, exerciseName);
-      }
-      return { ...prev, [exerciseName]: rows };
-    });
-  };
+      if (nextState) startRestTimer(restDuration, exerciseName);
+    },
+    [startRestTimer]
+  );
 
   const handleFinish = async () => {
     const completedSets = Object.entries(setsData).flatMap(([exerciseName, rows]) =>
@@ -267,7 +412,7 @@ export default function ActiveWorkoutLogger({
       if (!confirm("Nog geen sets afgevinkt. Toch voltooien?")) return;
     }
 
-    cancelTimer();
+    clearTimer();
     localStorage.removeItem(STORAGE_SETS_KEY);
     localStorage.removeItem(STORAGE_START_KEY);
 
@@ -278,132 +423,19 @@ export default function ActiveWorkoutLogger({
 
   return (
     <div className="space-y-3.5">
-      {/* Dynamic Floating Rusttimer bovenaan */}
-      {secondsRemaining !== null && (
-        <div className="fixed top-4 left-0 right-0 z-[999] flex justify-center px-4 pointer-events-none">
-          <div className="pointer-events-auto bg-[#141416] border border-[#baa3d0]/40 rounded-full pl-5 pr-3 py-2 flex items-center gap-4 shadow-[0_16px_36px_rgba(0,0,0,0.6)]">
-            <div className="flex items-baseline gap-2">
-              <span className="font-editorial text-[24px] tracking-wider text-[#baa3d0] leading-none">
-                {Math.floor(secondsRemaining / 60)}:
-                {(secondsRemaining % 60).toString().padStart(2, "0")}
-              </span>
-              <span className="text-[10px] font-semibold tracking-wider text-[#a1a1aa] uppercase">
-                Rust
-              </span>
-            </div>
+      <RestTimer target={restTarget} onAdd={addTime} onExpire={clearTimer} />
 
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => addTime(30)}
-                className="h-8 px-2.5 rounded-full bg-white/[0.08] hover:bg-white/[0.14] text-white text-[11px] font-semibold flex items-center gap-1 transition apple-press"
-              >
-                <Plus className="w-3 h-3 text-[#baa3d0]" />
-                30s
-              </button>
+      {exercises.map((ex) => (
+        <ExerciseSection
+          key={ex.id}
+          exercise={ex}
+          rows={setsData[ex.name] ?? EMPTY_ROWS}
+          previous={previousLogsMap[ex.name]}
+          onUpdate={handleUpdate}
+          onToggle={handleToggleSet}
+        />
+      ))}
 
-              <button
-                type="button"
-                onClick={cancelTimer}
-                className="w-8 h-8 rounded-full bg-white/[0.08] hover:bg-white/[0.14] text-[#a1a1aa] hover:text-white flex items-center justify-center transition apple-press"
-              >
-                <X className="w-3.5 h-3.5 stroke-[2.5]" />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Oefeningenlijst */}
-      {exercises.map((ex) => {
-        const rows = setsData[ex.name] || [];
-        const prev = previousLogsMap[ex.name];
-        const restDuration = ex.restSeconds || 90;
-
-        return (
-          <section
-            key={ex.id}
-            className="bg-[#141416] border border-white/[0.08] rounded-[30px] p-5 space-y-3 shadow-[0_12px_28px_rgba(0,0,0,0.2)]"
-          >
-            <div className="flex items-center justify-between px-1">
-              <h2 className="font-editorial text-[22px] tracking-wide text-white leading-none">
-                {ex.name}
-              </h2>
-              <span className="text-[11px] font-semibold tracking-[0.18em] text-[#baa3d0] uppercase">
-                {rows.length} {rows.length === 1 ? "SET" : "SETS"}
-              </span>
-            </div>
-
-            {/* Kolomtitels */}
-            <div className="grid grid-cols-[28px_1fr_1fr_36px] gap-2.5 px-2 text-[10px] uppercase font-semibold text-[#71717a] text-center">
-              <span>#</span>
-              <span>KG</span>
-              <span>REPS</span>
-              <span></span>
-            </div>
-
-            {/* Sets rijen */}
-            <div className="space-y-2">
-              {rows.map((row, idx) => {
-                const isDone = row.isCompleted;
-
-                return (
-                  <div
-                    key={idx}
-                    className={`grid grid-cols-[28px_1fr_1fr_36px] gap-2.5 items-center rounded-2xl px-2 py-1.5 transition ${
-                      isDone
-                        ? "bg-[#1d1d22] border border-white/[0.06]"
-                        : "bg-[#18181b] border border-transparent"
-                    }`}
-                  >
-                    <span className="text-center font-editorial text-[16px] text-[#71717a]">
-                      {row.setNumber}
-                    </span>
-
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      placeholder={prev?.weight ? String(prev.weight) : "0"}
-                      value={row.weight}
-                      disabled={isDone}
-                      onChange={(e) =>
-                        handleUpdate(ex.name, idx, "weight", e.target.value)
-                      }
-                      className="w-full bg-[#121214] border border-white/[0.06] rounded-xl py-2 text-center font-mono text-[15px] font-medium text-white outline-none focus:border-[#baa3d0] disabled:opacity-40"
-                    />
-
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      placeholder={prev?.reps ? String(prev.reps) : "10"}
-                      value={row.reps}
-                      disabled={isDone}
-                      onChange={(e) =>
-                        handleUpdate(ex.name, idx, "reps", e.target.value)
-                      }
-                      className="w-full bg-[#121214] border border-white/[0.06] rounded-xl py-2 text-center font-mono text-[15px] font-medium text-white outline-none focus:border-[#baa3d0] disabled:opacity-40"
-                    />
-
-                    <button
-                      type="button"
-                      onClick={() => handleToggleSet(ex.name, idx, restDuration)}
-                      className={`w-9 h-9 rounded-full flex items-center justify-center transition apple-press ${
-                        isDone
-                          ? "bg-[#baa3d0] text-[#141416]"
-                          : "border border-white/20 text-transparent hover:border-[#baa3d0] hover:text-[#baa3d0]"
-                      }`}
-                    >
-                      <Check className="w-4 h-4 stroke-[3]" />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        );
-      })}
-
-      {/* Voltooien Knop */}
       <button
         onClick={handleFinish}
         disabled={isFinishing}

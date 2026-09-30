@@ -1,7 +1,7 @@
 // app/schedule/page.tsx
-import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { getSchedule } from "@/lib/queries";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
@@ -11,41 +11,7 @@ export default async function SchedulePage() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) redirect("/login");
 
-  const userId = session.user.id;
-
-  // 1. Alle plannen ophalen inclusief aantal oefeningen
-  const rawPlans = await prisma.workoutPlan.findMany({
-    where: { userId },
-    include: {
-      exercises: {
-        select: { id: true },
-      },
-    },
-    orderBy: { name: "asc" },
-  });
-
-  const plans = rawPlans.map((p) => ({
-    id: p.id,
-    name: p.name,
-    exercisesCount: p.exercises.length,
-  }));
-
-  // 2. Weekrooster ophalen via WeeklySchedule
-  const weeklySchedule = await prisma.weeklySchedule.findUnique({
-    where: { userId },
-    include: {
-      days: true,
-    },
-  });
-
-  const initialDays: Record<number, string> = {};
-  if (weeklySchedule?.days) {
-    weeklySchedule.days.forEach((d) => {
-      if (d.planId) {
-        initialDays[d.dayOfWeek] = d.planId;
-      }
-    });
-  }
+  const { plans, initialDays } = await getSchedule(session.user.id);
 
   return (
     <div className="min-h-screen bg-[#baa3d0] text-white pb-32 pt-4 px-4 select-none">

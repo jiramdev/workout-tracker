@@ -1,7 +1,7 @@
 // app/analytics/page.tsx
-import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { getAnalytics } from "@/lib/queries";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, Trophy } from "lucide-react";
@@ -11,20 +11,7 @@ export default async function AnalyticsPage() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) redirect("/login");
 
-  const userId = session.user.id;
-
-  // 1. Workouts ophalen (chronologisch)
-  const workouts = await prisma.workoutLog.findMany({
-    where: {
-      userId,
-      completedAt: { not: null },
-    },
-    include: {
-      entries: true,
-      plan: true,
-    },
-    orderBy: { completedAt: "asc" },
-  });
+  const { workouts, weightLogs } = await getAnalytics(session.user.id);
 
   const totalWorkouts = workouts.length;
 
@@ -42,7 +29,7 @@ export default async function AnalyticsPage() {
         sessionBestE1RM = e1rm;
       }
 
-      const exName = (e as any).exerciseName || "Oefening";
+      const exName = e.exerciseName || "Oefening";
       const currentMax = exerciseMaxMap.get(exName) || 0;
       if (e.weight > currentMax) {
         exerciseMaxMap.set(exName, e.weight);
@@ -79,12 +66,6 @@ export default async function AnalyticsPage() {
     .sort((a, b) => b.weight - a.weight)
     .slice(0, 3);
 
-  // 3. Lichaamsgewicht progressie
-  const weightLogs = await prisma.bodyWeightLog.findMany({
-    where: { userId },
-    orderBy: { loggedAt: "asc" },
-  });
-
   const weightChartPoints = weightLogs.map((log) => ({
     date: new Date(log.loggedAt).toLocaleDateString("nl-NL", {
       day: "numeric",
@@ -92,17 +73,6 @@ export default async function AnalyticsPage() {
     }),
     value: Number(log.weight.toFixed(1)),
   }));
-
-  const firstWeight = weightLogs[0]?.weight ?? null;
-  const currentWeight = weightLogs[weightLogs.length - 1]?.weight ?? null;
-
-  let deltaStr = "--";
-  if (firstWeight !== null && currentWeight !== null && weightLogs.length > 1) {
-    const diff = Number((currentWeight - firstWeight).toFixed(1));
-    deltaStr = diff > 0 ? `+${diff}` : `${diff}`;
-  } else if (currentWeight !== null) {
-    deltaStr = "0.0";
-  }
 
   return (
     <div className="min-h-screen bg-[#baa3d0] text-white pb-32 pt-4 px-4 select-none">

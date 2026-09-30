@@ -5,6 +5,7 @@ import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
+import { refreshUserCache } from "@/lib/queries";
 
 interface CompletedSet {
   exerciseName: string;
@@ -45,6 +46,7 @@ export async function finishWorkout({
     },
   });
 
+  refreshUserCache(session.user.id);
   revalidatePath("/");
   revalidatePath("/analytics");
   return { success: true, workoutLogId: workoutLog.id };

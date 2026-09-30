@@ -5,6 +5,7 @@ import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
+import { refreshUserCache } from "@/lib/queries";
 import { redirect } from "next/navigation";
 
 // 1. Naam van het plan bijwerken
@@ -17,6 +18,7 @@ export async function updatePlanName(planId: string, name: string) {
     data: { name: name.trim() },
   });
 
+  refreshUserCache(session.user.id);
   revalidatePath(`/plans/${planId}`);
   revalidatePath("/schedule");
   revalidatePath("/");
@@ -51,6 +53,7 @@ export async function addExerciseToPlan(
     },
   });
 
+  refreshUserCache(session.user.id);
   revalidatePath(`/plans/${planId}`);
   revalidatePath("/schedule");
   revalidatePath("/");
@@ -65,6 +68,7 @@ export async function removeExerciseFromPlan(planId: string, exerciseId: string)
     where: { id: exerciseId },
   });
 
+  refreshUserCache(session.user.id);
   revalidatePath(`/plans/${planId}`);
   revalidatePath("/schedule");
   revalidatePath("/");
@@ -87,6 +91,7 @@ export async function deletePlan(planId: string) {
     where: { id: planId, userId: session.user.id },
   });
 
+  refreshUserCache(session.user.id);
   revalidatePath("/schedule");
   revalidatePath("/");
   redirect("/schedule");

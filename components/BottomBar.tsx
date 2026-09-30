@@ -29,6 +29,7 @@ export default function BottomBar() {
             <Link
               key={tab.href}
               href={tab.href}
+              prefetch={false}
               className={`p-2 rounded-full transition apple-press flex items-center justify-center relative ${
                 isActive ? "text-white" : "text-[#71717a] hover:text-[#a1a1aa]"
               }`}

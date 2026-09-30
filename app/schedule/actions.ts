@@ -5,6 +5,7 @@ import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
+import { refreshUserCache } from "@/lib/queries";
 
 // 1. Koppel een plan aan een specifieke dag (0 = Zo, 1 = Ma ... 6 = Za)
 export async function assignPlanToDay(dayOfWeek: number, planId: string | null) {
@@ -38,6 +39,7 @@ export async function assignPlanToDay(dayOfWeek: number, planId: string | null) 
     },
   });
 
+  refreshUserCache(userId);
   revalidatePath("/schedule");
   revalidatePath("/");
 }
@@ -56,6 +58,7 @@ export async function createWorkoutPlan(name: string) {
     },
   });
 
+  refreshUserCache(session.user.id);
   revalidatePath("/schedule");
   return plan;
 }

@@ -1,7 +1,7 @@
 // app/workout/active/page.tsx
-import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { getActiveWorkout } from "@/lib/queries";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
@@ -15,73 +15,17 @@ export default async function ActiveWorkoutPage({ searchParams }: PageProps) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) redirect("/login");
 
-  const userId = session.user.id;
   const { planId } = await searchParams;
+  const workout = await getActiveWorkout(session.user.id, planId);
 
-  let exercises: Array<{
-    id: string;
-    name: string;
-    targetSets: number;
-    restSeconds: number;
-  }> = [];
-
-  // 1. Haal plan en oefeningen op met minimale payload
-  if (planId) {
-    const plan = await prisma.workoutPlan.findFirst({
-      where: { id: planId, userId },
-      select: {
-        exercises: {
-          select: {
-            id: true,
-            name: true,
-            targetSets: true,
-            restSeconds: true,
-          },
-          orderBy: { order: "asc" },
-        },
-      },
-    });
-
-    if (plan) {
-      exercises = plan.exercises;
-    }
-  }
-
-  // Fallback indien geen plan
-  if (exercises.length === 0) {
-    exercises = [
-      { id: "1", name: "Bench Press", targetSets: 3, restSeconds: 90 },
-      { id: "2", name: "Incline Dumbbell Press", targetSets: 3, restSeconds: 90 },
-      { id: "3", name: "Tricep Pushdown", targetSets: 3, restSeconds: 60 },
-    ];
-  }
-
-  // 2. Haal alleen de laatste workout op van deze user in plaats van alle historische data
-  const latestWorkout = await prisma.workoutLog.findFirst({
-    where: { userId, completedAt: { not: null } },
-    orderBy: { completedAt: "desc" },
-    select: {
-      entries: {
-        select: {
-          exerciseName: true,
-          weight: true,
-          reps: true,
-        },
-      },
-    },
-  });
-
-  const previousLogsMap: Record<string, { weight: number; reps: number }> = {};
-  if (latestWorkout?.entries) {
-    for (const entry of latestWorkout.entries) {
-      if (!previousLogsMap[entry.exerciseName]) {
-        previousLogsMap[entry.exerciseName] = {
-          weight: entry.weight,
-          reps: entry.reps,
-        };
-      }
-    }
-  }
+  const exercises =
+    workout.exercises.length > 0
+      ? workout.exercises
+      : [
+          { id: "1", name: "Bench Press", targetSets: 3, restSeconds: 90 },
+          { id: "2", name: "Incline Dumbbell Press", targetSets: 3, restSeconds: 90 },
+          { id: "3", name: "Tricep Pushdown", targetSets: 3, restSeconds: 60 },
+        ];
 
   return (
     <div className="min-h-screen bg-[#baa3d0] text-white pb-32 pt-4 px-4 select-none">
@@ -105,7 +49,7 @@ export default async function ActiveWorkoutPage({ searchParams }: PageProps) {
         <ActiveWorkoutLogger
           planId={planId}
           exercises={exercises}
-          previousLogsMap={previousLogsMap}
+          previousLogsMap={workout.previousLogsMap}
         />
       </main>
     </div>
