@@ -28,8 +28,9 @@ interface SetRow {
 
 const STORAGE_TARGET_KEY = "active_workout_rest_target";
 const STORAGE_EXERCISE_KEY = "active_workout_rest_exercise";
+const STORAGE_SETS_KEY = "active_workout_sets_data";
+const STORAGE_START_KEY = "active_workout_started_at";
 
-// Helper om VAPID public key te converteren voor Apple PushManager
 function urlBase64ToUint8Array(base64String: string) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -47,12 +48,36 @@ export default function ActiveWorkoutLogger({
   previousLogsMap,
 }: ActiveWorkoutLoggerProps) {
   const router = useRouter();
-  const [startedAt] = useState<string>(new Date().toISOString());
+
+  // Begintijd bewaren in localStorage zodat de sessie-duur klopt
+  const [startedAt] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const savedStart = localStorage.getItem(STORAGE_START_KEY);
+      if (savedStart) return savedStart;
+      const now = new Date().toISOString();
+      localStorage.setItem(STORAGE_START_KEY, now);
+      return now;
+    }
+    return new Date().toISOString();
+  });
+
   const [isFinishing, setIsFinishing] = useState(false);
   const [secondsRemaining, setSecondsRemaining] = useState<number | null>(null);
   const swRegistrationRef = useRef<ServiceWorkerRegistration | null>(null);
 
+  // Initialiseren: check eerst of er al opgeslagen sets in localStorage staan
   const [setsData, setSetsData] = useState<Record<string, SetRow[]>>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem(STORAGE_SETS_KEY);
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {
+          console.error("Fout bij parsen opgeslagen sets:", e);
+        }
+      }
+    }
+
     const initial: Record<string, SetRow[]> = {};
     exercises.forEach((ex) => {
       const prev = previousLogsMap[ex.name];
@@ -66,7 +91,14 @@ export default function ActiveWorkoutLogger({
     return initial;
   });
 
-  // Service Worker registreren bij het laden van de pagina
+  // Schrijf setsData altijd synchroon naar localStorage bij wijzigingen
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem(STORAGE_SETS_KEY, JSON.stringify(setsData));
+    }
+  }, [setsData]);
+
+  // Service Worker registreren
   useEffect(() => {
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").then((reg) => {
@@ -75,7 +107,7 @@ export default function ActiveWorkoutLogger({
     }
   }, []);
 
-  // Timer synchronisatie op het scherm
+  // Rusttimer sync
   const checkTimerSync = useCallback(() => {
     if (typeof window === "undefined") return;
     const storedTarget = localStorage.getItem(STORAGE_TARGET_KEY);
@@ -97,19 +129,11 @@ export default function ActiveWorkoutLogger({
     }
   }, []);
 
-  // Echte achtergrond-push inplannen via QStash & APNs
   const scheduleServerPush = async (seconds: number, exerciseName: string) => {
     try {
-      if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
-        console.warn("PushManager niet ondersteund in deze browser");
-        return;
-      }
-
+      if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
       const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-      if (!vapidPublicKey) {
-        console.error("NEXT_PUBLIC_VAPID_PUBLIC_KEY ontbreekt");
-        return;
-      }
+      if (!vapidPublicKey) return;
 
       const reg = await navigator.serviceWorker.ready;
       let sub = await reg.pushManager.getSubscription();
@@ -122,8 +146,7 @@ export default function ActiveWorkoutLogger({
       }
 
       if (sub) {
-        console.log("[Push] Submitting scheduled push naar /api/rest-timer...");
-        const res = await fetch("/api/rest-timer", {
+        await fetch("/api/rest-timer", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -133,15 +156,12 @@ export default function ActiveWorkoutLogger({
             planId,
           }),
         });
-        const result = await res.json();
-        console.log("[Push Response]", result);
       }
     } catch (err) {
-      console.error("Fout bij het inplannen van server push:", err);
+      console.error("Fout bij server push inplannen:", err);
     }
   };
 
-  // Start rusttimer
   const startRestTimer = async (seconds: number, exerciseName: string) => {
     if (typeof window !== "undefined" && "Notification" in window) {
       if (Notification.permission === "default") {
@@ -154,7 +174,6 @@ export default function ActiveWorkoutLogger({
     localStorage.setItem(STORAGE_EXERCISE_KEY, exerciseName);
     setSecondsRemaining(seconds);
 
-    // DIT WAS DE ONTBREKENDE STAP: Stuur naar de server voor background push!
     scheduleServerPush(seconds, exerciseName);
   };
 
@@ -241,6 +260,9 @@ export default function ActiveWorkoutLogger({
     }
 
     cancelTimer();
+    localStorage.removeItem(STORAGE_SETS_KEY);
+    localStorage.removeItem(STORAGE_START_KEY);
+
     setIsFinishing(true);
     await finishWorkout({ planId, startedAt, sets: completedSets });
     router.push("/");

@@ -35,27 +35,27 @@ self.addEventListener("install", (event) => {
     event.waitUntil(self.registration.showNotification(data.title, options));
   });
   
-  // Zorg dat aantikken van de notificatie betrouwbaar de actieve sessie opent
   self.addEventListener("notificationclick", (event) => {
     event.notification.close();
-  
     const targetUrl = event.notification.data?.url || "/workout/active";
   
     event.waitUntil(
       self.clients
         .matchAll({ type: "window", includeUncontrolled: true })
         .then((clientList) => {
-          // 1. Zoek naar een bestaand venster/tab van de app
           for (const client of clientList) {
             if ("focus" in client) {
-              // Navigeer het geopende venster direct naar de juiste URL en focus
+              // Als de client al op de active workout pagina staat, alleen focussen (geen reload)
+              if (client.url.includes("/workout/active")) {
+                return client.focus();
+              }
+              // Anders naar de actieve pagina navigeren en focussen
               if ("navigate" in client) {
                 client.navigate(targetUrl);
               }
               return client.focus();
             }
           }
-          // 2. Geen bestaand venster gevonden: open een nieuw PWA window
           if (self.clients.openWindow) {
             return self.clients.openWindow(targetUrl);
           }
