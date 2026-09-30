@@ -3,9 +3,9 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Gym Tracker",
-    short_name: "GymTracker",
-    description: "Persoonlijke workout en voortgang tracker",
+    name: "repiq",
+    short_name: "repiq",
+    description: "Every rep, counted.",
     start_url: "/",
     display: "standalone",
     background_color: "#baa3d0",

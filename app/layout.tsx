@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Anton } from "next/font/google";
 import "./globals.css";
 import BottomBar from "@/components/BottomBar";
+import LaunchScreen from "@/components/LaunchScreen";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -16,12 +17,12 @@ const anton = Anton({
 });
 
 export const metadata: Metadata = {
-  title: "Gym Tracker",
-  description: "Track je gym sessies, sets en gewicht",
+  title: "repiq",
+  description: "Every rep, counted.",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "GymTracker",
+    title: "repiq",
   },
 };
 
@@ -46,6 +47,7 @@ export default function RootLayout({
       >
         {children}
         <BottomBar />
+        <LaunchScreen />
       </body>
     </html>
   );
