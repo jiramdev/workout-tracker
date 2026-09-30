@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { signIn } from "next-auth/react";
 import { registerUser } from "@/app/actions/auth";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -19,14 +20,29 @@ export default function RegisterPage() {
     setError(null);
 
     const formData = new FormData(e.currentTarget);
+    const email = formData.get("email") as string;
+    const password = formData.get("password") as string;
     const res = await registerUser(formData);
 
     if (res?.error) {
       setError(res.error);
       setLoading(false);
-    } else {
-      router.push("/login?registered=true");
+      return;
     }
+
+    const signedIn = await signIn("credentials", {
+      email,
+      password,
+      redirect: false,
+    });
+
+    if (signedIn?.error) {
+      router.push("/login?callbackUrl=/onboarding");
+      return;
+    }
+
+    router.push("/onboarding");
+    router.refresh();
   }
 
   return (

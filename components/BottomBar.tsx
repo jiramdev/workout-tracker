@@ -19,13 +19,13 @@ export default function BottomBar() {
   const router = useRouter();
 
   useEffect(() => {
-    if (pathname === "/login" || pathname === "/register") return;
+    if (pathname === "/login" || pathname === "/register" || pathname === "/onboarding") return;
     for (const tab of TABS) {
       router.prefetch(tab.href, { kind: PrefetchKind.FULL });
     }
   }, [pathname, router]);
 
-  if (pathname === "/login" || pathname === "/register") {
+  if (pathname === "/login" || pathname === "/register" || pathname === "/onboarding") {
     return null;
   }
 
