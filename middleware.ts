@@ -1,11 +1,21 @@
 // middleware.ts
+import { NextResponse } from "next/server";
 import { withAuth } from "next-auth/middleware";
 
-export default withAuth({
-  pages: {
-    signIn: "/login",
+export default withAuth(
+  function middleware(req) {
+    const requestHeaders = new Headers(req.headers);
+    requestHeaders.set("x-pathname", req.nextUrl.pathname);
+    return NextResponse.next({
+      request: { headers: requestHeaders },
+    });
   },
-});
+  {
+    pages: {
+      signIn: "/login",
+    },
+  }
+);
 
 export const config = {
   matcher: [

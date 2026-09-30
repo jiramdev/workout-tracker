@@ -1,5 +1,7 @@
 // app/layout.tsx
 import type { Metadata, Viewport } from "next";
+import { Suspense } from "react";
+import { headers } from "next/headers";
 import { Inter, Anton } from "next/font/google";
 import "./globals.css";
 import BottomBar from "@/components/BottomBar";
@@ -21,31 +23,133 @@ export const metadata: Metadata = {
   description: "Every rep, counted.",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "black-translucent",
+    statusBarStyle: "default",
     title: "repiq",
+    startupImage: [
+      {
+        url: "/splash/iphone-14.png",
+        media:
+          "(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)",
+      },
+      {
+        url: "/splash/iphone-14-pro.png",
+        media:
+          "(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)",
+      },
+      {
+        url: "/splash/iphone-14-plus.png",
+        media:
+          "(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3)",
+      },
+      {
+        url: "/splash/iphone-14-pro-max.png",
+        media:
+          "(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)",
+      },
+      {
+        url: "/splash/iphone-16-pro.png",
+        media:
+          "(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3)",
+      },
+      {
+        url: "/splash/iphone-16-pro-max.png",
+        media:
+          "(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3)",
+      },
+      {
+        url: "/splash/iphone-11.png",
+        media:
+          "(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2)",
+      },
+      {
+        url: "/splash/iphone-x.png",
+        media:
+          "(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)",
+      },
+      {
+        url: "/splash/iphone-se.png",
+        media:
+          "(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2)",
+      },
+    ],
   },
 };
 
 export const viewport: Viewport = {
   themeColor: "#baa3d0",
+  colorScheme: "light",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const path = (await headers()).get("x-pathname") ?? "";
+  const showBoot = path.length > 0 && !path.startsWith("/onboarding");
+
   return (
-    <html lang="nl" className="dark" style={{ backgroundColor: "#baa3d0" }}>
+    <html lang="nl" style={{ backgroundColor: "#baa3d0", colorScheme: "light" }}>
       <body
         className={`${inter.variable} ${anton.variable} font-sans antialiased min-h-screen selection:bg-[#141416] selection:text-[#baa3d0]`}
-        style={{ backgroundColor: "#baa3d0" }}
+        style={{ backgroundColor: "#baa3d0", colorScheme: "light" }}
       >
-        {children}
+        <style>{`
+          html, body { background: #baa3d0; color-scheme: light; }
+          #boot-splash {
+            position: fixed;
+            inset: 0;
+            z-index: 80;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: #baa3d0;
+            color: #141416;
+          }
+          #boot-splash .boot-name {
+            margin: 0;
+            font-family: var(--font-anton), Impact, sans-serif;
+            font-size: 88px;
+            letter-spacing: -0.03em;
+            line-height: 0.88;
+          }
+          #boot-splash .boot-slogan {
+            margin: 20px 0 0;
+            font-size: 15px;
+            font-weight: 500;
+            letter-spacing: -0.015em;
+            opacity: 0.7;
+          }
+          #boot-splash .boot-track {
+            margin-top: 24px;
+            height: 3px;
+            width: 112px;
+            overflow: hidden;
+            border-radius: 999px;
+            background: rgba(20, 20, 22, 0.15);
+          }
+          #boot-bar {
+            height: 100%;
+            width: 0%;
+            border-radius: 999px;
+            background: #141416;
+          }
+        `}</style>
+        {showBoot && (
+          <div id="boot-splash" aria-hidden="true">
+            <p className="boot-name">repiq</p>
+            <p className="boot-slogan">Every rep, counted.</p>
+            <div className="boot-track">
+              <div id="boot-bar" />
+            </div>
+          </div>
+        )}
+        <Suspense fallback={null}>{children}</Suspense>
         <BottomBar />
         <LaunchScreen />
       </body>

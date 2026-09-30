@@ -62,7 +62,11 @@ export default function LaunchScreen() {
   const show = !finished && !AUTH_ROUTES.includes(pathname) && !signingUp;
 
   useEffect(() => {
-    if (AUTH_ROUTES.includes(pathname) || pathname.startsWith("/onboarding") || started.current) return;
+    if (AUTH_ROUTES.includes(pathname) || pathname.startsWith("/onboarding")) {
+      document.getElementById("boot-splash")?.remove();
+      return;
+    }
+    if (started.current) return;
     started.current = true;
 
     const prefetch = (href: string) => {
@@ -86,17 +90,24 @@ export default function LaunchScreen() {
       const total = pending.length + 1;
       let done = 1;
       setProgress(done / total);
+      const bootBar = document.getElementById("boot-bar");
+      if (bootBar) bootBar.style.width = `${(done / total) * 100}%`;
 
       await Promise.all(
         pending.map(async (href) => {
           await waitForPrefetch(prefetch, href);
           done += 1;
           setProgress(done / total);
+          const bar = document.getElementById("boot-bar");
+          if (bar) bar.style.width = `${(done / total) * 100}%`;
         })
       );
 
       setProgress(1);
+      const bar = document.getElementById("boot-bar");
+      if (bar) bar.style.width = "100%";
       await new Promise((resolve) => window.setTimeout(resolve, 180));
+      document.getElementById("boot-splash")?.remove();
       setFinished(true);
     })();
   }, [pathname]);
