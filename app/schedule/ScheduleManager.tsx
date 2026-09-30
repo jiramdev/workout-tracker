@@ -1,13 +1,12 @@
 // app/schedule/ScheduleManager.tsx
 "use client";
 
-import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
+import { useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
 import Prefetch from "@/components/Prefetch";
 import { popTransition } from "@/lib/motion";
-import { Plus, Dumbbell, ChevronRight, ChevronDown, Moon, Check, Calendar } from "lucide-react";
+import { Plus, ChevronRight, Calendar } from "lucide-react";
 import { assignPlanToDay, createWorkoutPlan } from "./actions";
 
 interface Plan {
@@ -22,50 +21,20 @@ interface ScheduleManagerProps {
 }
 
 const DAYS_OF_WEEK = [
-  { day: 1, name: "Maandag" },
-  { day: 2, name: "Dinsdag" },
-  { day: 3, name: "Woensdag" },
-  { day: 4, name: "Donderdag" },
-  { day: 5, name: "Vrijdag" },
-  { day: 6, name: "Zaterdag" },
-  { day: 0, name: "Zondag" },
+  { day: 1, name: "Maandag", short: "MA" },
+  { day: 2, name: "Dinsdag", short: "DI" },
+  { day: 3, name: "Woensdag", short: "WO" },
+  { day: 4, name: "Donderdag", short: "DO" },
+  { day: 5, name: "Vrijdag", short: "VR" },
+  { day: 6, name: "Zaterdag", short: "ZA" },
+  { day: 0, name: "Zondag", short: "ZO" },
 ];
 
 export default function ScheduleManager({ plans, initialDays }: ScheduleManagerProps) {
   const [dayAssignments, setDayAssignments] = useState(initialDays);
   const [isCreatingPlan, setIsCreatingPlan] = useState(false);
   const [newPlanName, setNewPlanName] = useState("");
-  const [mounted, setMounted] = useState(false);
-  const [dayMenu, setDayMenu] = useState<{
-    day: number;
-    top: number;
-    left: number;
-    width: number;
-    origin: "top" | "bottom";
-  } | null>(null);
 
-  useEffect(() => setMounted(true), []);
-
-  useEffect(() => {
-    if (!dayMenu) return;
-    const openedAt = performance.now();
-    const close = (event: Event) => {
-      if (performance.now() - openedAt < 350) return;
-      const target = event.target;
-      if (target instanceof Element && target.closest("[role='menu']")) return;
-      setDayMenu(null);
-    };
-    window.addEventListener("scroll", close, true);
-    window.addEventListener("resize", close);
-    window.addEventListener("repiq-tab", close);
-    return () => {
-      window.removeEventListener("scroll", close, true);
-      window.removeEventListener("resize", close);
-      window.removeEventListener("repiq-tab", close);
-    };
-  }, [dayMenu]);
-
-  // Koppel plan aan een dag
   const handleSelectPlanForDay = async (day: number, planId: string | null) => {
     setDayAssignments((prev) => {
       const copy = { ...prev };
@@ -73,28 +42,7 @@ export default function ScheduleManager({ plans, initialDays }: ScheduleManagerP
       else delete copy[day];
       return copy;
     });
-    setDayMenu(null);
     await assignPlanToDay(day, planId);
-  };
-
-  const openDayMenu = (day: number, button: HTMLButtonElement) => {
-    if (dayMenu?.day === day) {
-      setDayMenu(null);
-      return;
-    }
-    const rect = button.getBoundingClientRect();
-    const menuHeight = Math.min((1 + plans.length) * 44 + 8, window.innerHeight * 0.7);
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const openUp = spaceBelow < menuHeight + 88 && rect.top > menuHeight + 12;
-    const width = Math.min(rect.width, window.innerWidth - 24);
-    const left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12));
-    setDayMenu({
-      day,
-      top: openUp ? Math.max(12, rect.top - menuHeight - 6) : rect.bottom + 6,
-      left,
-      width,
-      origin: openUp ? "bottom" : "top",
-    });
   };
 
   // Nieuw plan aanmaken
@@ -118,34 +66,40 @@ export default function ScheduleManager({ plans, initialDays }: ScheduleManagerP
           <Calendar className="w-3.5 h-3.5 text-[#baa3d0]" />
         </div>
 
-        <div>
-          {DAYS_OF_WEEK.map(({ day, name }) => {
-            const assignedPlanId = dayAssignments[day];
-            const currentPlan = plans.find((p) => p.id === assignedPlanId);
+        <div className="grid grid-cols-4 gap-2 px-2 pt-2">
+          {DAYS_OF_WEEK.map(({ day, name, short }) => {
+            const currentPlan = plans.find((p) => p.id === dayAssignments[day]);
 
             return (
-              <button
+              <div
                 key={day}
-                type="button"
-                onClick={(event) => openDayMenu(day, event.currentTarget)}
-                className="w-full px-3 py-2 flex items-center justify-between gap-3 rounded-xl active:bg-white/[0.06]"
+                className="relative aspect-square rounded-2xl border border-white/[0.04] bg-[#1b1b1e] flex flex-col items-center justify-center gap-1 px-1"
               >
-                <span className="text-[13px] font-medium text-white shrink-0">{name}</span>
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <span
-                    className={`min-w-0 font-editorial text-[15px] tracking-wider leading-none truncate ${
-                      currentPlan ? "text-[#baa3d0]" : "text-[#71717a]"
-                    }`}
-                  >
-                    {currentPlan ? currentPlan.name : "Rustdag"}
-                  </span>
-                  <ChevronDown
-                    className={`w-3 h-3 shrink-0 text-[#52525b] transition-transform ${
-                      dayMenu?.day === day ? "rotate-180" : ""
-                    }`}
-                  />
-                </div>
-              </button>
+                <span className="font-editorial text-[20px] tracking-wider leading-none text-white">
+                  {short}
+                </span>
+                <span
+                  className={`w-full text-center text-[9px] font-semibold tracking-[0.08em] uppercase leading-none truncate ${
+                    currentPlan ? "text-[#baa3d0]" : "text-[#71717a]"
+                  }`}
+                >
+                  {currentPlan ? currentPlan.name : "Rust"}
+                </span>
+                <select
+                  aria-label={name}
+                  data-no-swipe
+                  value={currentPlan ? currentPlan.id : ""}
+                  onChange={(event) => handleSelectPlanForDay(day, event.target.value || null)}
+                  className="absolute inset-0 h-full w-full cursor-pointer select-auto text-base opacity-0"
+                >
+                  <option value="">Rustdag</option>
+                  {plans.map((plan) => (
+                    <option key={plan.id} value={plan.id}>
+                      {plan.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             );
           })}
         </div>
@@ -221,71 +175,6 @@ export default function ScheduleManager({ plans, initialDays }: ScheduleManagerP
           )}
         </div>
       </section>
-
-      {mounted &&
-        createPortal(
-          <AnimatePresence>
-            {dayMenu && (
-              <motion.button
-                key="day-menu-backdrop"
-                type="button"
-                aria-label="Sluiten"
-                className="fixed inset-0 z-[60] bg-black/20"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.15 }}
-                onClick={() => setDayMenu(null)}
-              />
-            )}
-            {dayMenu && (
-              <motion.div
-                key="day-menu"
-                role="menu"
-                data-no-swipe
-                initial={{ opacity: 0, scale: 0.94 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.96 }}
-                transition={popTransition}
-                style={{
-                  top: dayMenu.top,
-                  left: dayMenu.left,
-                  width: dayMenu.width,
-                  transformOrigin: dayMenu.origin === "bottom" ? "bottom center" : "top center",
-                }}
-                className="fixed z-[70] max-h-[70vh] overflow-y-auto rounded-[14px] border border-white/10 bg-[#2c2c2e]/92 shadow-[0_18px_50px_rgba(0,0,0,0.45)] backdrop-blur-2xl"
-              >
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => handleSelectPlanForDay(dayMenu.day, null)}
-                  className="w-full px-3.5 py-2.5 flex items-center gap-3 text-left text-[15px] text-white active:bg-white/10"
-                >
-                  <Moon className="w-4 h-4 text-[#a1a1aa]" />
-                  <span className="flex-1">Rustdag</span>
-                  {!dayAssignments[dayMenu.day] && <Check className="w-4 h-4 text-[#baa3d0]" />}
-                </button>
-                {plans.length > 0 && <div className="h-px bg-white/10" />}
-                {plans.map((plan) => (
-                  <button
-                    key={plan.id}
-                    type="button"
-                    role="menuitem"
-                    onClick={() => handleSelectPlanForDay(dayMenu.day, plan.id)}
-                    className="w-full px-3.5 py-2.5 flex items-center gap-3 text-left text-[15px] text-white active:bg-white/10"
-                  >
-                    <Dumbbell className="w-4 h-4 text-[#a1a1aa]" />
-                    <span className="flex-1 truncate">{plan.name}</span>
-                    {dayAssignments[dayMenu.day] === plan.id && (
-                      <Check className="w-4 h-4 text-[#baa3d0]" />
-                    )}
-                  </button>
-                ))}
-              </motion.div>
-            )}
-          </AnimatePresence>,
-          document.body,
-        )}
     </div>
   );
 }
