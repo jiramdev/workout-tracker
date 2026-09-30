@@ -2,6 +2,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getDashboard } from "@/lib/queries";
+import Prefetch from "@/components/Prefetch";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Settings } from "lucide-react";
@@ -26,9 +27,11 @@ export default async function HomePage() {
 
   const displayName = session.user.name || session.user.email?.split("@")[0] || "ATHLETE";
   const userInitial = displayName.charAt(0).toUpperCase();
+  const workoutHref = todayPlan ? `/workout/active?planId=${todayPlan.id}` : "/schedule";
 
   return (
     <div className="min-h-screen bg-[#baa3d0] text-white pb-32 pt-4 px-4 select-none">
+      <Prefetch hrefs={[workoutHref]} />
       <main className="max-w-sm mx-auto space-y-3.5">
         {/* Top Header: Account Pill links & Instellingen rechts */}
         <header className="flex justify-between items-center px-1 py-1">
@@ -66,7 +69,8 @@ export default async function HomePage() {
 
         {/* 1. Hero Workout Card */}
         <Link
-          href={todayPlan ? `/workout/active?planId=${todayPlan.id}` : "/schedule"}
+          href={workoutHref}
+          prefetch={true}
           className="block bg-[#141416] border border-white/[0.08] rounded-[34px] px-6 py-9 text-center space-y-3 relative overflow-hidden shadow-[0_16px_36px_rgba(0,0,0,0.25)] transition apple-press"
         >
           <p className="text-[12px] font-semibold tracking-[0.2em] text-[#baa3d0] uppercase">

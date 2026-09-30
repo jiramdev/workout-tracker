@@ -3,6 +3,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Prefetch from "@/components/Prefetch";
 import { Plus, Dumbbell, ChevronRight, Moon, Sparkles } from "lucide-react";
 import { assignPlanToDay, createWorkoutPlan } from "./actions";
 
@@ -56,6 +57,7 @@ export default function ScheduleManager({ plans, initialDays }: ScheduleManagerP
 
   return (
     <div className="space-y-4">
+      <Prefetch hrefs={plans.map((plan) => `/plans/${plan.id}`)} />
       {/* 1. Weekrooster overzicht (Ma t/m Zo) */}
       <section className="bg-[#141416] border border-white/[0.08] rounded-[34px] p-5 shadow-[0_16px_36px_rgba(0,0,0,0.25)] space-y-3">
         <div className="flex items-center justify-between px-1">
@@ -185,6 +187,7 @@ export default function ScheduleManager({ plans, initialDays }: ScheduleManagerP
               <Link
                 key={p.id}
                 href={`/plans/${p.id}`}
+                prefetch={true}
                 className="bg-[#1b1b1e] hover:bg-[#202024] border border-white/[0.04] rounded-2xl px-4 py-3 flex items-center justify-between transition apple-press group"
               >
                 <div>
