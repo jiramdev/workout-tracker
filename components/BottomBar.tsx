@@ -7,12 +7,13 @@ import { usePathname, useRouter } from "next/navigation";
 import { PrefetchKind } from "next/dist/client/components/router-reducer/router-reducer-types";
 import { LayoutGrid, Calendar, BarChart3, User } from "lucide-react";
 import { motion } from "motion/react";
+import { TAB_HREFS } from "@/lib/motion";
 
 const TABS = [
-  { href: "/", icon: LayoutGrid, label: "Workouts" },
-  { href: "/schedule", icon: Calendar, label: "Schema" },
-  { href: "/analytics", icon: BarChart3, label: "Stats" },
-  { href: "/account", icon: User, label: "Account" },
+  { href: TAB_HREFS[0], icon: LayoutGrid, label: "Workouts" },
+  { href: TAB_HREFS[1], icon: Calendar, label: "Schema" },
+  { href: TAB_HREFS[2], icon: BarChart3, label: "Stats" },
+  { href: TAB_HREFS[3], icon: User, label: "Account" },
 ];
 
 export default function BottomBar() {
@@ -36,11 +37,80 @@ export default function BottomBar() {
         {TABS.map((tab) => {
           const isActive = pathname === tab.href;
           const Icon = tab.icon;
+          const from = TAB_HREFS.indexOf(pathname as (typeof TAB_HREFS)[number]);
+          const to = TAB_HREFS.indexOf(tab.href);
+          const slide =
+            from !== -1 && to !== -1 && from !== to
+              ? to > from
+                ? "nav-forward"
+                : "nav-back"
+              : null;
           return (
             <Link
               key={tab.href}
               href={tab.href}
               prefetch={true}
+              onClick={(event) => {
+                if (!slide) return;
+                if (
+                  event.metaKey ||
+                  event.ctrlKey ||
+                  event.shiftKey ||
+                  event.altKey ||
+                  event.button !== 0
+                ) {
+                  return;
+                }
+                const page = document.getElementById("page-root");
+                const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+                if (!page || reduce) return;
+
+                event.preventDefault();
+                const direction = slide === "nav-forward" ? 1 : -1;
+                document.querySelectorAll("[data-page-clone]").forEach((node) => node.remove());
+                page.style.transition = "none";
+                page.style.transform = "";
+
+                const clone = page.cloneNode(true) as HTMLElement;
+                clone.removeAttribute("id");
+                clone.setAttribute("data-page-clone", "");
+                clone.style.position = "fixed";
+                clone.style.inset = "0";
+                clone.style.zIndex = "40";
+                clone.style.overflow = "hidden";
+                clone.style.pointerEvents = "none";
+                clone.style.margin = "0";
+                clone.style.transform = "translateX(0)";
+                clone.style.transition = "none";
+                document.body.appendChild(clone);
+
+                const html = document.documentElement;
+                const previousOverflow = html.style.overflowX;
+                html.style.overflowX = "clip";
+                page.style.transform = `translateX(${direction * 100}%)`;
+
+                let finished = false;
+                const finish = () => {
+                  if (finished) return;
+                  finished = true;
+                  clone.remove();
+                  page.style.transition = "none";
+                  page.style.transform = "";
+                  html.style.overflowX = previousOverflow;
+                };
+
+                router.push(tab.href);
+                window.requestAnimationFrame(() => {
+                  window.requestAnimationFrame(() => {
+                    const timing = "transform 450ms cubic-bezier(0.32, 0.72, 0, 1)";
+                    clone.style.transition = timing;
+                    page.style.transition = timing;
+                    clone.style.transform = `translateX(${direction * -100}%)`;
+                    page.style.transform = "translateX(0)";
+                  });
+                });
+                window.setTimeout(finish, 540);
+              }}
               className={`p-2 rounded-full transition apple-press flex items-center justify-center relative ${
                 isActive ? "text-white" : "text-[#71717a] hover:text-[#a1a1aa]"
               }`}

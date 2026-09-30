@@ -6,7 +6,6 @@ import { Inter, Anton } from "next/font/google";
 import "./globals.css";
 import BottomBar from "@/components/BottomBar";
 import LaunchScreen from "@/components/LaunchScreen";
-import PageMotion from "@/components/PageMotion";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -150,9 +149,9 @@ export default async function RootLayout({
             </div>
           </div>
         )}
-        <Suspense fallback={null}>
-          <PageMotion>{children}</PageMotion>
-        </Suspense>
+        <div id="page-root">
+          <Suspense fallback={null}>{children}</Suspense>
+        </div>
         <BottomBar />
         <LaunchScreen />
       </body>
