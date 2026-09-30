@@ -25,46 +25,63 @@ export default async function ActiveWorkoutPage({ searchParams }: PageProps) {
     restSeconds: number;
   }> = [];
 
+  // 1. Haal plan en oefeningen op met minimale payload
   if (planId) {
     const plan = await prisma.workoutPlan.findFirst({
       where: { id: planId, userId },
-      include: {
+      select: {
         exercises: {
+          select: {
+            id: true,
+            name: true,
+            targetSets: true,
+            restSeconds: true,
+          },
           orderBy: { order: "asc" },
         },
       },
     });
 
     if (plan) {
-      exercises = plan.exercises.map((e) => ({
-        id: e.id,
-        name: e.name,
-        targetSets: e.targetSets || 3,
-        restSeconds: e.restSeconds || 90,
-      }));
+      exercises = plan.exercises;
     }
   }
 
-  const exerciseNames = exercises.map((e) => e.name);
-  const previousEntries = await prisma.logEntry.findMany({
-    where: {
-      exerciseName: { in: exerciseNames },
-      workoutLog: { userId },
-    },
-    orderBy: {
-      workoutLog: { completedAt: "desc" },
+  // Fallback indien geen plan
+  if (exercises.length === 0) {
+    exercises = [
+      { id: "1", name: "Bench Press", targetSets: 3, restSeconds: 90 },
+      { id: "2", name: "Incline Dumbbell Press", targetSets: 3, restSeconds: 90 },
+      { id: "3", name: "Tricep Pushdown", targetSets: 3, restSeconds: 60 },
+    ];
+  }
+
+  // 2. Haal alleen de laatste workout op van deze user in plaats van alle historische data
+  const latestWorkout = await prisma.workoutLog.findFirst({
+    where: { userId, completedAt: { not: null } },
+    orderBy: { completedAt: "desc" },
+    select: {
+      entries: {
+        select: {
+          exerciseName: true,
+          weight: true,
+          reps: true,
+        },
+      },
     },
   });
 
   const previousLogsMap: Record<string, { weight: number; reps: number }> = {};
-  previousEntries.forEach((entry) => {
-    if (!previousLogsMap[entry.exerciseName]) {
-      previousLogsMap[entry.exerciseName] = {
-        weight: entry.weight,
-        reps: entry.reps,
-      };
+  if (latestWorkout?.entries) {
+    for (const entry of latestWorkout.entries) {
+      if (!previousLogsMap[entry.exerciseName]) {
+        previousLogsMap[entry.exerciseName] = {
+          weight: entry.weight,
+          reps: entry.reps,
+        };
+      }
     }
-  });
+  }
 
   return (
     <div className="min-h-screen bg-[#baa3d0] text-white pb-32 pt-4 px-4 select-none">

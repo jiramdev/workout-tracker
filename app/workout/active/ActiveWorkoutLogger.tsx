@@ -49,7 +49,7 @@ export default function ActiveWorkoutLogger({
 }: ActiveWorkoutLoggerProps) {
   const router = useRouter();
 
-  // Begintijd bewaren in localStorage zodat de sessie-duur klopt
+  // Begintijd ophalen of instellen
   const [startedAt] = useState<string>(() => {
     if (typeof window !== "undefined") {
       const savedStart = localStorage.getItem(STORAGE_START_KEY);
@@ -63,9 +63,9 @@ export default function ActiveWorkoutLogger({
 
   const [isFinishing, setIsFinishing] = useState(false);
   const [secondsRemaining, setSecondsRemaining] = useState<number | null>(null);
-  const swRegistrationRef = useRef<ServiceWorkerRegistration | null>(null);
+  const swReadyRef = useRef<ServiceWorkerRegistration | null>(null);
 
-  // Initialiseren: check eerst of er al opgeslagen sets in localStorage staan
+  // Initialiseren: direct uit localStorage laden zodat vinkjes en gewichten bewaard blijven
   const [setsData, setSetsData] = useState<Record<string, SetRow[]>>(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem(STORAGE_SETS_KEY);
@@ -73,7 +73,7 @@ export default function ActiveWorkoutLogger({
         try {
           return JSON.parse(saved);
         } catch (e) {
-          console.error("Fout bij parsen opgeslagen sets:", e);
+          console.error("Fout bij uitlezen sets cache:", e);
         }
       }
     }
@@ -91,23 +91,23 @@ export default function ActiveWorkoutLogger({
     return initial;
   });
 
-  // Schrijf setsData altijd synchroon naar localStorage bij wijzigingen
+  // Bewaar wijzigingen direct in localStorage
   useEffect(() => {
     if (typeof window !== "undefined") {
       localStorage.setItem(STORAGE_SETS_KEY, JSON.stringify(setsData));
     }
   }, [setsData]);
 
-  // Service Worker registreren
+  // Service Worker registreren bij opstarten
   useEffect(() => {
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").then((reg) => {
-        swRegistrationRef.current = reg;
+      navigator.serviceWorker.ready.then((reg) => {
+        swReadyRef.current = reg;
       });
     }
   }, []);
 
-  // Rusttimer sync
+  // Timer synchronisatie vanuit absolute timestamp
   const checkTimerSync = useCallback(() => {
     if (typeof window === "undefined") return;
     const storedTarget = localStorage.getItem(STORAGE_TARGET_KEY);
@@ -117,8 +117,7 @@ export default function ActiveWorkoutLogger({
     }
 
     const targetTime = parseInt(storedTarget, 10);
-    const now = Date.now();
-    const remaining = Math.max(0, Math.ceil((targetTime - now) / 1000));
+    const remaining = Math.max(0, Math.ceil((targetTime - Date.now()) / 1000));
 
     if (remaining <= 0) {
       localStorage.removeItem(STORAGE_TARGET_KEY);
@@ -129,43 +128,47 @@ export default function ActiveWorkoutLogger({
     }
   }, []);
 
-  const scheduleServerPush = async (seconds: number, exerciseName: string) => {
-    try {
-      if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+  // Achtergrond push registratie via QStash & APNs (niet-blokkerend voor de UI)
+  const scheduleServerPush = useCallback(
+    (seconds: number, exerciseName: string) => {
+      if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+
       const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
       if (!vapidPublicKey) return;
 
-      const reg = await navigator.serviceWorker.ready;
-      let sub = await reg.pushManager.getSubscription();
+      navigator.serviceWorker.ready
+        .then(async (reg) => {
+          let sub = await reg.pushManager.getSubscription();
+          if (!sub) {
+            sub = await reg.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+            });
+          }
 
-      if (!sub) {
-        sub = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
-        });
-      }
+          if (sub) {
+            fetch("/api/rest-timer", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                subscription: sub,
+                delaySeconds: seconds,
+                exerciseName,
+                planId,
+              }),
+            }).catch((err) => console.error("Achtergrond push plannen mislukt:", err));
+          }
+        })
+        .catch(() => {});
+    },
+    [planId]
+  );
 
-      if (sub) {
-        await fetch("/api/rest-timer", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            subscription: sub,
-            delaySeconds: seconds,
-            exerciseName,
-            planId,
-          }),
-        });
-      }
-    } catch (err) {
-      console.error("Fout bij server push inplannen:", err);
-    }
-  };
-
-  const startRestTimer = async (seconds: number, exerciseName: string) => {
+  // Rusttimer activeren
+  const startRestTimer = (seconds: number, exerciseName: string) => {
     if (typeof window !== "undefined" && "Notification" in window) {
       if (Notification.permission === "default") {
-        await Notification.requestPermission();
+        Notification.requestPermission();
       }
     }
 
@@ -182,6 +185,7 @@ export default function ActiveWorkoutLogger({
     const exerciseName = localStorage.getItem(STORAGE_EXERCISE_KEY) || "";
     const base = storedTarget ? parseInt(storedTarget, 10) : Date.now();
     const newTarget = Math.max(Date.now(), base) + extraSeconds * 1000;
+
     localStorage.setItem(STORAGE_TARGET_KEY, newTarget.toString());
     checkTimerSync();
 
@@ -195,12 +199,16 @@ export default function ActiveWorkoutLogger({
     setSecondsRemaining(null);
   };
 
+  // Efficiënte 1-seconde loop: stopt automatisch wanneer er geen timer loopt
   useEffect(() => {
+    const hasTarget = typeof window !== "undefined" && !!localStorage.getItem(STORAGE_TARGET_KEY);
+    if (!hasTarget && secondsRemaining === null) return;
+
     checkTimerSync();
-    const interval = setInterval(checkTimerSync, 500);
+    const interval = setInterval(checkTimerSync, 1000);
 
     const handleVisibility = () => {
-      checkTimerSync();
+      if (document.visibilityState === "visible") checkTimerSync();
     };
 
     window.addEventListener("visibilitychange", handleVisibility);
@@ -211,7 +219,7 @@ export default function ActiveWorkoutLogger({
       window.removeEventListener("visibilitychange", handleVisibility);
       window.removeEventListener("focus", checkTimerSync);
     };
-  }, [checkTimerSync]);
+  }, [checkTimerSync, secondsRemaining]);
 
   const handleUpdate = (
     exerciseName: string,
@@ -270,7 +278,7 @@ export default function ActiveWorkoutLogger({
 
   return (
     <div className="space-y-3.5">
-      {/* Floating Rusttimer bovenaan */}
+      {/* Dynamic Floating Rusttimer bovenaan */}
       {secondsRemaining !== null && (
         <div className="fixed top-4 left-0 right-0 z-[999] flex justify-center px-4 pointer-events-none">
           <div className="pointer-events-auto bg-[#141416] border border-[#baa3d0]/40 rounded-full pl-5 pr-3 py-2 flex items-center gap-4 shadow-[0_16px_36px_rgba(0,0,0,0.6)]">
@@ -326,6 +334,7 @@ export default function ActiveWorkoutLogger({
               </span>
             </div>
 
+            {/* Kolomtitels */}
             <div className="grid grid-cols-[28px_1fr_1fr_36px] gap-2.5 px-2 text-[10px] uppercase font-semibold text-[#71717a] text-center">
               <span>#</span>
               <span>KG</span>
@@ -333,6 +342,7 @@ export default function ActiveWorkoutLogger({
               <span></span>
             </div>
 
+            {/* Sets rijen */}
             <div className="space-y-2">
               {rows.map((row, idx) => {
                 const isDone = row.isCompleted;
@@ -393,6 +403,7 @@ export default function ActiveWorkoutLogger({
         );
       })}
 
+      {/* Voltooien Knop */}
       <button
         onClick={handleFinish}
         disabled={isFinishing}
