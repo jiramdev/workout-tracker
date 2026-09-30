@@ -38,27 +38,24 @@ self.addEventListener("install", (event) => {
   
   self.addEventListener("notificationclick", (event) => {
     event.notification.close();
-    const targetUrl = event.notification.data?.url || "/workout/active";
-  
+    const raw = event.notification.data?.url || "/workout/active";
+    let path = "/workout/active";
+    try {
+      const target = new URL(raw, self.location.origin);
+      if (target.origin === self.location.origin) path = target.pathname + target.search;
+    } catch (e) {}
+
     event.waitUntil(
       self.clients
         .matchAll({ type: "window", includeUncontrolled: true })
         .then((clientList) => {
           for (const client of clientList) {
-            if ("focus" in client) {
-              // Als de client al op de active workout pagina staat, alleen focussen (geen reload)
-              if (client.url.includes("/workout/active")) {
-                return client.focus();
-              }
-              // Anders naar de actieve pagina navigeren en focussen
-              if ("navigate" in client) {
-                client.navigate(targetUrl);
-              }
-              return client.focus();
-            }
+            if (!client.url.startsWith(self.location.origin)) continue;
+            client.postMessage({ type: "repiq-open", url: path });
+            return client.focus();
           }
           if (self.clients.openWindow) {
-            return self.clients.openWindow(targetUrl);
+            return self.clients.openWindow(new URL(path, self.location.origin).href);
           }
         })
     );

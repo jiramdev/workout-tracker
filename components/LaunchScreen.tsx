@@ -69,6 +69,12 @@ export default function LaunchScreen() {
     if (started.current) return;
     started.current = true;
 
+    if (sessionStorage.getItem("repiq-booted") === "1") {
+      document.getElementById("boot-splash")?.remove();
+      setFinished(true);
+      return;
+    }
+
     const prefetch = (href: string) => {
       routerRef.current.prefetch(href, { kind: PrefetchKind.FULL });
     };
@@ -107,6 +113,7 @@ export default function LaunchScreen() {
       const bar = document.getElementById("boot-bar");
       if (bar) bar.style.width = "100%";
       await new Promise((resolve) => window.setTimeout(resolve, 180));
+      sessionStorage.setItem("repiq-booted", "1");
       document.getElementById("boot-splash")?.remove();
       setFinished(true);
     })();

@@ -6,6 +6,7 @@ import { Inter, Anton } from "next/font/google";
 import "./globals.css";
 import BottomBar from "@/components/BottomBar";
 import LaunchScreen from "@/components/LaunchScreen";
+import OpenFromNotification from "@/components/OpenFromNotification";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -154,6 +155,7 @@ export default async function RootLayout({
         </div>
         <BottomBar />
         <LaunchScreen />
+        <OpenFromNotification />
       </body>
     </html>
   );

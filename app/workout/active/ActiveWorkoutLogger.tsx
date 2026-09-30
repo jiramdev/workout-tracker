@@ -1,7 +1,7 @@
 // app/workout/active/ActiveWorkoutLogger.tsx
 "use client";
 
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, X, Plus } from "lucide-react";
 import { motion } from "motion/react";
@@ -255,6 +255,31 @@ function setsStorageKey(planId?: string | null) {
   return `${STORAGE_SETS_KEY}:${planId ?? "none"}`;
 }
 
+function emptySets(exercises: Exercise[]): Record<string, SetRow[]> {
+  const initial: Record<string, SetRow[]> = {};
+  for (const ex of exercises) {
+    initial[ex.name] = Array.from({ length: ex.targetSets || 3 }, (_, idx) => ({
+      setNumber: idx + 1,
+      weight: "",
+      reps: "",
+      isCompleted: false,
+    }));
+  }
+  return initial;
+}
+
+function readSets(planId: string | null | undefined, exercises: Exercise[]) {
+  if (typeof window === "undefined") return emptySets(exercises);
+  const saved = localStorage.getItem(setsStorageKey(planId));
+  if (!saved) return emptySets(exercises);
+  try {
+    return JSON.parse(saved) as Record<string, SetRow[]>;
+  } catch (e) {
+    console.error("Fout bij uitlezen sets cache:", e);
+    return emptySets(exercises);
+  }
+}
+
 function loggedNumber(typed: string, previous: number | undefined, asInteger = false) {
   if (typed.trim() === "") return previous ?? 0;
   const parsed = asInteger ? parseInt(typed, 10) : Number(typed);
@@ -268,46 +293,31 @@ export default function ActiveWorkoutLogger({
 }: ActiveWorkoutLoggerProps) {
   const router = useRouter();
 
-  const [startedAt] = useState<string>(() => {
-    if (typeof window !== "undefined") {
-      const savedStart = localStorage.getItem(STORAGE_START_KEY);
-      if (savedStart) return savedStart;
-      const now = new Date().toISOString();
-      localStorage.setItem(STORAGE_START_KEY, now);
-      return now;
-    }
-    return new Date().toISOString();
-  });
-
+  const [startedAt, setStartedAt] = useState("");
   const [isFinishing, setIsFinishing] = useState(false);
   const [restTarget, setRestTarget] = useState<number | null>(null);
   const setsRef = useRef<Record<string, SetRow[]>>({});
+  const exercisesRef = useRef(exercises);
+  exercisesRef.current = exercises;
+  const skipSave = useRef(true);
 
-  const [setsData, setSetsData] = useState<Record<string, SetRow[]>>(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem(setsStorageKey(planId));
-      if (saved) {
-        try {
-          return JSON.parse(saved);
-        } catch (e) {
-          console.error("Fout bij uitlezen sets cache:", e);
-        }
-      }
-    }
-
-    const initial: Record<string, SetRow[]> = {};
-    exercises.forEach((ex) => {
-      initial[ex.name] = Array.from({ length: ex.targetSets || 3 }, (_, idx) => ({
-        setNumber: idx + 1,
-        weight: "",
-        reps: "",
-        isCompleted: false,
-      }));
-    });
-    return initial;
-  });
+  const [setsData, setSetsData] = useState<Record<string, SetRow[]>>(() => emptySets(exercises));
 
   setsRef.current = setsData;
+
+  useLayoutEffect(() => {
+    const savedStart = localStorage.getItem(STORAGE_START_KEY);
+    if (savedStart) {
+      setStartedAt(savedStart);
+    } else {
+      const now = new Date().toISOString();
+      localStorage.setItem(STORAGE_START_KEY, now);
+      setStartedAt(now);
+    }
+
+    skipSave.current = true;
+    setSetsData(readSets(planId, exercisesRef.current));
+  }, [planId]);
 
   useEffect(() => {
     setRestTarget(readRestTarget());
@@ -318,6 +328,10 @@ export default function ActiveWorkoutLogger({
   }, []);
 
   useEffect(() => {
+    if (skipSave.current) {
+      skipSave.current = false;
+      return;
+    }
     localStorage.setItem(setsStorageKey(planId), JSON.stringify(setsData));
   }, [planId, setsData]);
 
