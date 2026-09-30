@@ -14,8 +14,9 @@ model User {
   name         String?
   heightCm     Float?
   age          Int?
-  sex          String?
-  createdAt    DateTime        @default(now())
+  sex           String?
+  restMessageId String?
+  createdAt     DateTime        @default(now())
 
   workoutPlans WorkoutPlan[]
   schedule     WeeklySchedule?

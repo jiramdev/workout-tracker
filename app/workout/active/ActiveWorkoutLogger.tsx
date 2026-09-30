@@ -35,6 +35,7 @@ interface SetRow {
 
 const STORAGE_TARGET_KEY = "active_workout_rest_target";
 const STORAGE_EXERCISE_KEY = "active_workout_rest_exercise";
+const STORAGE_REST_TOKEN_KEY = "active_workout_rest_token";
 const STORAGE_SETS_KEY = "active_workout_sets_data_v2";
 const STORAGE_START_KEY = "active_workout_started_at";
 const EMPTY_ROWS: SetRow[] = [];
@@ -282,6 +283,7 @@ export default function ActiveWorkoutLogger({
   const exercisesRef = useRef(exercises);
   exercisesRef.current = exercises;
   const skipSave = useRef(true);
+  const pushGen = useRef(0);
 
   const [setsData, setSetsData] = useState<Record<string, SetRow[]>>(() => emptySets(exercises));
 
@@ -317,12 +319,30 @@ export default function ActiveWorkoutLogger({
     localStorage.setItem(setsStorageKey(planId), JSON.stringify(setsData));
   }, [planId, setsData]);
 
+  const cancelRestNotification = useCallback((token: string) => {
+    fetch("/api/rest-timer", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
+    }).catch((err) => console.error("Rustmelding annuleren mislukt:", err));
+  }, []);
+
+  const dismissRestNotification = useCallback(() => {
+    pushGen.current += 1;
+    const token = localStorage.getItem(STORAGE_REST_TOKEN_KEY);
+    localStorage.removeItem(STORAGE_REST_TOKEN_KEY);
+    if (token) cancelRestNotification(token);
+  }, [cancelRestNotification]);
+
   const scheduleServerPush = useCallback(
     (seconds: number, exerciseName: string) => {
       if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
 
       const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
       if (!vapidPublicKey) return;
+
+      const gen = ++pushGen.current;
+      const token = crypto.randomUUID();
 
       navigator.serviceWorker.ready
         .then(async (reg) => {
@@ -333,23 +353,28 @@ export default function ActiveWorkoutLogger({
               applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
             });
           }
+          if (!sub || pushGen.current !== gen) return;
 
-          if (sub) {
-            fetch("/api/rest-timer", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                subscription: sub,
-                delaySeconds: seconds,
-                exerciseName,
-                planId,
-              }),
-            }).catch((err) => console.error("Achtergrond push plannen mislukt:", err));
+          const response = await fetch("/api/rest-timer", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              subscription: sub,
+              delaySeconds: seconds,
+              exerciseName,
+              planId,
+              token,
+            }),
+          });
+          if (!response.ok || pushGen.current !== gen) {
+            cancelRestNotification(token);
+            return;
           }
+          localStorage.setItem(STORAGE_REST_TOKEN_KEY, token);
         })
         .catch((err) => console.error("Achtergrond push plannen mislukt:", err));
     },
-    [planId]
+    [cancelRestNotification, planId]
   );
 
   const clearTimer = useCallback(() => {
@@ -358,15 +383,21 @@ export default function ActiveWorkoutLogger({
     setRestTarget(null);
   }, []);
 
+  const stopTimer = useCallback(() => {
+    dismissRestNotification();
+    clearTimer();
+  }, [clearTimer, dismissRestNotification]);
+
   const startRestTimer = useCallback(
     (seconds: number, exerciseName: string) => {
       const targetTimestamp = Date.now() + seconds * 1000;
       localStorage.setItem(STORAGE_TARGET_KEY, targetTimestamp.toString());
       localStorage.setItem(STORAGE_EXERCISE_KEY, exerciseName);
       setRestTarget(targetTimestamp);
+      dismissRestNotification();
       scheduleServerPush(seconds, exerciseName);
     },
-    [scheduleServerPush]
+    [dismissRestNotification, scheduleServerPush]
   );
 
   const handleUpdate = useCallback(
@@ -417,7 +448,7 @@ export default function ActiveWorkoutLogger({
       if (!confirm("Nog geen sets afgevinkt. Toch voltooien?")) return;
     }
 
-    clearTimer();
+    stopTimer();
     localStorage.removeItem(setsStorageKey(planId));
     localStorage.removeItem("active_workout_sets_data");
     localStorage.removeItem(STORAGE_START_KEY);
@@ -429,7 +460,7 @@ export default function ActiveWorkoutLogger({
 
   function handleCancel() {
     if (!confirm("Workout annuleren? Er wordt niets opgeslagen.")) return;
-    clearTimer();
+    stopTimer();
     localStorage.removeItem(setsStorageKey(planId));
     localStorage.removeItem("active_workout_sets_data");
     localStorage.removeItem(STORAGE_START_KEY);
@@ -456,7 +487,7 @@ export default function ActiveWorkoutLogger({
         </div>
       </header>
 
-      <RestTimer target={restTarget} onCancel={clearTimer} onExpire={clearTimer} />
+      <RestTimer target={restTarget} onCancel={stopTimer} onExpire={clearTimer} />
 
       {exercises.map((ex) => (
         <ExerciseSection

@@ -1,6 +1,7 @@
 // app/api/rest-timer/send/route.ts
 import { NextResponse } from "next/server";
 import webpush from "web-push";
+import prisma from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -14,10 +15,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "VAPID niet ingesteld" }, { status: 500 });
     }
 
-    const { subscription, exerciseName, planId } = await req.json();
+    const { subscription, exerciseName, planId, userId, token } = await req.json();
 
     if (!subscription || !subscription.endpoint) {
       return NextResponse.json({ error: "Ongeldige subscription" }, { status: 400 });
+    }
+
+    if (typeof userId === "string" && typeof token === "string") {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { restMessageId: true },
+      });
+      if (!user || user.restMessageId !== token) {
+        return NextResponse.json({ skipped: true });
+      }
     }
 
     webpush.setVapidDetails(subject, publicKey, privateKey);
