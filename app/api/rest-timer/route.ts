@@ -14,18 +14,19 @@ export async function POST(req: Request) {
 
     const qstashToken = process.env.QSTASH_TOKEN;
     if (!qstashToken) {
-      console.error("QSTASH_TOKEN ontbreekt in environment variables.");
+      console.error("QSTASH_TOKEN ontbreekt");
       return NextResponse.json({ error: "QStash token ontbreekt" }, { status: 500 });
     }
 
     const client = new Client({ token: qstashToken });
 
-    // Bepaal de live URL van je Vercel app
-    const appUrl =
-      process.env.NEXTAUTH_URL ||
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+    // Haal het ECHTE publieke domein dynamisch op van het inkomende request
+    const host = req.headers.get("x-forwarded-host") || req.headers.get("host");
+    const protocol = req.headers.get("x-forwarded-proto") || "https";
+    const appUrl = `${protocol}://${host}`;
 
-    // Geef QStash de opdracht om over X seconden onze verzend-webhook aan te roepen
+    console.log(`[QStash Schedule] Callback URL ingesteld op: ${appUrl}/api/rest-timer/send`);
+
     await client.publishJSON({
       url: `${appUrl}/api/rest-timer/send`,
       body: {
@@ -35,7 +36,7 @@ export async function POST(req: Request) {
       delay: Math.max(1, delaySeconds || 90),
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, target: `${appUrl}/api/rest-timer/send` });
   } catch (error) {
     console.error("Fout bij QStash delay request:", error);
     return NextResponse.json({ error: "Kon timer niet inplannen" }, { status: 500 });

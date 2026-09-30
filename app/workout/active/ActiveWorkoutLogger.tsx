@@ -28,7 +28,18 @@ interface SetRow {
 
 const STORAGE_TARGET_KEY = "active_workout_rest_target";
 const STORAGE_EXERCISE_KEY = "active_workout_rest_exercise";
-const STORAGE_NOTIFIED_KEY = "active_workout_rest_notified";
+
+// Helper om VAPID public key te converteren voor Apple PushManager
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
 
 export default function ActiveWorkoutLogger({
   planId,
@@ -55,7 +66,7 @@ export default function ActiveWorkoutLogger({
     return initial;
   });
 
-  // Service Worker registreren
+  // Service Worker registreren bij het laden van de pagina
   useEffect(() => {
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").then((reg) => {
@@ -64,30 +75,7 @@ export default function ActiveWorkoutLogger({
     }
   }, []);
 
-  // Notificatie afvuren via Service Worker
-  const triggerNotification = useCallback((exerciseName: string) => {
-    if (Notification.permission !== "granted") return;
-
-    if (navigator.serviceWorker.controller) {
-      navigator.serviceWorker.controller.postMessage({
-        type: "TRIGGER_REST_NOTIFICATION",
-        exerciseName,
-      });
-    } else if (swRegistrationRef.current) {
-      swRegistrationRef.current.showNotification("Rust voorbij ⚡️", {
-        body: `Tijd voor je volgende set van ${exerciseName || "je oefening"}!`,
-        icon: "/icon.png",
-        badge: "/icon.png",
-      });
-    } else {
-      new Notification("Rust voorbij ⚡️", {
-        body: `Tijd voor je volgende set van ${exerciseName || "je oefening"}!`,
-        icon: "/icon.png",
-      });
-    }
-  }, []);
-
-  // Timer synchronisatie & inspectie
+  // Timer synchronisatie op het scherm
   const checkTimerSync = useCallback(() => {
     if (typeof window === "undefined") return;
     const storedTarget = localStorage.getItem(STORAGE_TARGET_KEY);
@@ -101,24 +89,58 @@ export default function ActiveWorkoutLogger({
     const remaining = Math.max(0, Math.ceil((targetTime - now) / 1000));
 
     if (remaining <= 0) {
-      // Is er al een notificatie gestuurd voor deze specifieke rusttimer?
-      const alreadyNotified = localStorage.getItem(STORAGE_NOTIFIED_KEY) === "true";
-      const exerciseName = localStorage.getItem(STORAGE_EXERCISE_KEY) || "";
-
-      if (!alreadyNotified) {
-        localStorage.setItem(STORAGE_NOTIFIED_KEY, "true");
-        triggerNotification(exerciseName);
-      }
-
       localStorage.removeItem(STORAGE_TARGET_KEY);
       localStorage.removeItem(STORAGE_EXERCISE_KEY);
       setSecondsRemaining(null);
     } else {
       setSecondsRemaining(remaining);
     }
-  }, [triggerNotification]);
+  }, []);
 
-  // Start timer
+  // Echte achtergrond-push inplannen via QStash & APNs
+  const scheduleServerPush = async (seconds: number, exerciseName: string) => {
+    try {
+      if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+        console.warn("PushManager niet ondersteund in deze browser");
+        return;
+      }
+
+      const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+      if (!vapidPublicKey) {
+        console.error("NEXT_PUBLIC_VAPID_PUBLIC_KEY ontbreekt");
+        return;
+      }
+
+      const reg = await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+        });
+      }
+
+      if (sub) {
+        console.log("[Push] Submitting scheduled push naar /api/rest-timer...");
+        const res = await fetch("/api/rest-timer", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            subscription: sub,
+            delaySeconds: seconds,
+            exerciseName,
+          }),
+        });
+        const result = await res.json();
+        console.log("[Push Response]", result);
+      }
+    } catch (err) {
+      console.error("Fout bij het inplannen van server push:", err);
+    }
+  };
+
+  // Start rusttimer
   const startRestTimer = async (seconds: number, exerciseName: string) => {
     if (typeof window !== "undefined" && "Notification" in window) {
       if (Notification.permission === "default") {
@@ -129,23 +151,27 @@ export default function ActiveWorkoutLogger({
     const targetTimestamp = Date.now() + seconds * 1000;
     localStorage.setItem(STORAGE_TARGET_KEY, targetTimestamp.toString());
     localStorage.setItem(STORAGE_EXERCISE_KEY, exerciseName);
-    localStorage.removeItem(STORAGE_NOTIFIED_KEY);
     setSecondsRemaining(seconds);
+
+    // DIT WAS DE ONTBREKENDE STAP: Stuur naar de server voor background push!
+    scheduleServerPush(seconds, exerciseName);
   };
 
   const addTime = (extraSeconds: number) => {
     const storedTarget = localStorage.getItem(STORAGE_TARGET_KEY);
+    const exerciseName = localStorage.getItem(STORAGE_EXERCISE_KEY) || "";
     const base = storedTarget ? parseInt(storedTarget, 10) : Date.now();
     const newTarget = Math.max(Date.now(), base) + extraSeconds * 1000;
     localStorage.setItem(STORAGE_TARGET_KEY, newTarget.toString());
-    localStorage.removeItem(STORAGE_NOTIFIED_KEY);
     checkTimerSync();
+
+    const remainingSecs = Math.max(1, Math.ceil((newTarget - Date.now()) / 1000));
+    scheduleServerPush(remainingSecs, exerciseName);
   };
 
   const cancelTimer = () => {
     localStorage.removeItem(STORAGE_TARGET_KEY);
     localStorage.removeItem(STORAGE_EXERCISE_KEY);
-    localStorage.removeItem(STORAGE_NOTIFIED_KEY);
     setSecondsRemaining(null);
   };
 
@@ -221,7 +247,7 @@ export default function ActiveWorkoutLogger({
 
   return (
     <div className="space-y-3.5">
-      {/* Dynamic Floating Rusttimer bovenaan */}
+      {/* Floating Rusttimer bovenaan */}
       {secondsRemaining !== null && (
         <div className="fixed top-4 left-0 right-0 z-[999] flex justify-center px-4 pointer-events-none">
           <div className="pointer-events-auto bg-[#141416] border border-[#baa3d0]/40 rounded-full pl-5 pr-3 py-2 flex items-center gap-4 shadow-[0_16px_36px_rgba(0,0,0,0.6)]">
