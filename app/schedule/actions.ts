@@ -12,7 +12,19 @@ export async function assignPlanToDay(dayOfWeek: number, planId: string | null) 
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) throw new Error("Niet ingelogd");
 
+  if (!Number.isInteger(dayOfWeek) || dayOfWeek < 0 || dayOfWeek > 6) {
+    throw new Error("Ongeldige dag");
+  }
+
   const userId = session.user.id;
+
+  if (planId) {
+    const plan = await prisma.workoutPlan.findFirst({
+      where: { id: planId, userId },
+      select: { id: true },
+    });
+    if (!plan) throw new Error("Plan niet gevonden");
+  }
 
   // Zorg dat het WeeklySchedule record bestaat voor de gebruiker
   const weeklySchedule = await prisma.weeklySchedule.upsert({

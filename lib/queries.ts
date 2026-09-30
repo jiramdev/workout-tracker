@@ -1,5 +1,6 @@
 import { unstable_cache, updateTag } from "next/cache";
 import prisma from "@/lib/prisma";
+import { amsterdamParts, amsterdamStartOfMonth } from "@/lib/amsterdam";
 import { asTracking } from "@/lib/exercise-library";
 
 export function userCacheTag(userId: string) {
@@ -20,13 +21,14 @@ function cached<T>(userId: string, key: string, load: () => Promise<T>) {
 export function getDashboard(userId: string) {
   return cached(userId, "dashboard", async () => {
     const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const { dayOfWeek } = amsterdamParts(now);
+    const startOfMonth = amsterdamStartOfMonth(now);
 
-    const [scheduleDay, latestWeight, monthlyLogs, user] = await Promise.all([
+    const [scheduleDay, latestWeight, sessionCount, user] = await Promise.all([
       prisma.scheduleDay.findFirst({
         where: {
           schedule: { userId },
-          dayOfWeek: now.getDay(),
+          dayOfWeek,
         },
         select: {
           plan: {
@@ -43,21 +45,14 @@ export function getDashboard(userId: string) {
         orderBy: { loggedAt: "desc" },
         select: { weight: true },
       }),
-      prisma.workoutLog.findMany({
+      prisma.workoutLog.count({
         where: { userId, completedAt: { gte: startOfMonth } },
-        select: { completedAt: true },
       }),
       prisma.user.findUnique({
         where: { id: userId },
         select: { name: true, email: true },
       }),
     ]);
-
-    const trainedDaysCount = new Set(
-      monthlyLogs
-        .filter((log) => log.completedAt)
-        .map((log) => new Date(log.completedAt!).getDate())
-    ).size;
 
     return {
       todayPlan: scheduleDay?.plan
@@ -70,8 +65,8 @@ export function getDashboard(userId: string) {
       latestWeight: latestWeight?.weight ?? null,
       profileName: user?.name ?? null,
       profileEmail: user?.email ?? null,
-      trainedDaysCount,
-      dayOfWeek: now.getDay(),
+      sessionCount,
+      dayOfWeek,
     };
   });
 }

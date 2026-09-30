@@ -205,8 +205,14 @@ export async function removeExerciseFromPlan(planId: string, exerciseId: string)
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) throw new Error("Niet ingelogd");
 
-  await (prisma as any).planExercise.delete({
-    where: { id: exerciseId },
+  const placement = await prisma.planExercise.findFirst({
+    where: { id: exerciseId, planId, plan: { userId: session.user.id } },
+    select: { id: true },
+  });
+  if (!placement) return;
+
+  await prisma.planExercise.delete({
+    where: { id: placement.id },
   });
 
   refreshUserCache(session.user.id);
@@ -220,17 +226,17 @@ export async function deletePlan(planId: string) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) throw new Error("Niet ingelogd");
 
-  await (prisma as any).scheduleDay.deleteMany({
-    where: { planId },
-  });
-
-  await (prisma as any).planExercise.deleteMany({
-    where: { planId },
-  });
-
-  await (prisma as any).workoutPlan.delete({
+  const plan = await prisma.workoutPlan.findFirst({
     where: { id: planId, userId: session.user.id },
+    select: { id: true },
   });
+  if (!plan) return;
+
+  await prisma.$transaction([
+    prisma.scheduleDay.deleteMany({ where: { planId: plan.id } }),
+    prisma.planExercise.deleteMany({ where: { planId: plan.id } }),
+    prisma.workoutPlan.delete({ where: { id: plan.id } }),
+  ]);
 
   refreshUserCache(session.user.id);
   revalidatePath("/schedule");

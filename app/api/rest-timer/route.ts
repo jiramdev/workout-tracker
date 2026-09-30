@@ -7,6 +7,34 @@ import prisma from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
+const MIN_DELAY_SECONDS = 1;
+const MAX_DELAY_SECONDS = 60 * 60;
+
+function restDelaySeconds(value: unknown) {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 90;
+  return Math.min(MAX_DELAY_SECONDS, Math.max(MIN_DELAY_SECONDS, Math.round(parsed)));
+}
+
+function appOrigin() {
+  const raw = process.env.APP_URL?.trim().replace(/\/$/, "");
+  if (!raw || !/^https?:\/\//i.test(raw)) return null;
+  return raw;
+}
+
+function readSubscription(value: unknown) {
+  if (!value || typeof value !== "object") return null;
+  const subscription = value as {
+    endpoint?: unknown;
+    keys?: { p256dh?: unknown; auth?: unknown };
+  };
+  if (typeof subscription.endpoint !== "string" || !subscription.endpoint) return null;
+  const p256dh = subscription.keys?.p256dh;
+  const auth = subscription.keys?.auth;
+  if (typeof p256dh !== "string" || typeof auth !== "string" || !p256dh || !auth) return null;
+  return { endpoint: subscription.endpoint, p256dh, auth };
+}
+
 export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
@@ -16,37 +44,66 @@ export async function POST(req: Request) {
 
     const { subscription, delaySeconds, exerciseName, planId, token } = await req.json();
 
-    if (!subscription || typeof token !== "string" || !token) {
+    if (typeof token !== "string" || !token) {
+      return NextResponse.json({ error: "Geen timer" }, { status: 400 });
+    }
+
+    const storedSubscription = readSubscription(subscription);
+    if (!storedSubscription) {
       return NextResponse.json({ error: "Geen subscription" }, { status: 400 });
     }
 
     const qstashToken = process.env.QSTASH_TOKEN;
+    const origin = appOrigin();
     if (!qstashToken) {
       console.error("QSTASH_TOKEN ontbreekt");
       return NextResponse.json({ error: "QStash token ontbreekt" }, { status: 500 });
     }
+    if (!origin) {
+      console.error("APP_URL ontbreekt");
+      return NextResponse.json({ error: "APP_URL ontbreekt" }, { status: 500 });
+    }
 
-    const client = new Client({ token: qstashToken });
-
-    const host = req.headers.get("x-forwarded-host") || req.headers.get("host");
-    const protocol = req.headers.get("x-forwarded-proto") || "https";
-    const appUrl = `${protocol}://${host}`;
+    await prisma.pushSubscription.upsert({
+      where: { endpoint: storedSubscription.endpoint },
+      create: {
+        userId: session.user.id,
+        endpoint: storedSubscription.endpoint,
+        p256dh: storedSubscription.p256dh,
+        auth: storedSubscription.auth,
+      },
+      update: {
+        userId: session.user.id,
+        p256dh: storedSubscription.p256dh,
+        auth: storedSubscription.auth,
+      },
+    });
 
     await prisma.user.update({
       where: { id: session.user.id },
       data: { restMessageId: token },
     });
 
+    const client = new Client({ token: qstashToken });
+    const headers: Record<string, string> = {};
+    const bypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+    if (bypass) headers["x-vercel-protection-bypass"] = bypass;
+
+    const name =
+      typeof exerciseName === "string" && exerciseName.trim()
+        ? exerciseName.trim().slice(0, 80)
+        : "je oefening";
+
     await client.publishJSON({
-      url: `${appUrl}/api/rest-timer/send`,
+      url: `${origin}/api/rest-timer/send`,
       body: {
-        subscription,
-        exerciseName: exerciseName || "je oefening",
-        planId: planId || null,
+        exerciseName: name,
+        planId: typeof planId === "string" && planId ? planId : null,
         userId: session.user.id,
         token,
       },
-      delay: Math.max(1, delaySeconds || 90),
+      delay: restDelaySeconds(delaySeconds),
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
     });
 
     return NextResponse.json({ success: true });

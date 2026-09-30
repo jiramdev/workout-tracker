@@ -18,7 +18,7 @@ export default function HomePanel({
   image,
   dayOfWeek,
   todayPlan,
-  trainedDaysCount,
+  sessionCount,
   latestWeight,
   unreadCount,
 }: {
@@ -26,7 +26,7 @@ export default function HomePanel({
   image?: string | null;
   dayOfWeek: number;
   todayPlan: { id: string; name: string; exerciseCount: number } | null;
-  trainedDaysCount: number;
+  sessionCount: number;
   latestWeight: number | null;
   unreadCount: number;
 }) {
@@ -111,7 +111,7 @@ export default function HomePanel({
             </span>
             <div className="flex-1 flex items-center justify-center">
               <span className="text-[48px] font-editorial tracking-tight text-white leading-none block">
-                {trainedDaysCount}
+                {sessionCount}
               </span>
             </div>
             <span className="text-[12px] text-[#a1a1aa] font-medium">deze maand</span>

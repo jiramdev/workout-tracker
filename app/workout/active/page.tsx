@@ -1,8 +1,10 @@
 // app/workout/active/page.tsx
+import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getActiveWorkout } from "@/lib/queries";
 import { redirect } from "next/navigation";
+import SubpageHeader from "@/components/SubpageHeader";
 import ActiveWorkoutLogger from "./ActiveWorkoutLogger";
 
 interface PageProps {
@@ -16,23 +18,32 @@ export default async function ActiveWorkoutPage({ searchParams }: PageProps) {
   const { planId } = await searchParams;
   const workout = await getActiveWorkout(session.user.id, planId);
 
-  const exercises =
-    workout.exercises.length > 0
-      ? workout.exercises
-      : [
-          { id: "1", exerciseId: null, name: "Bench Press", tracking: "weight" as const, targetSets: 3, restSeconds: 90 },
-          { id: "2", exerciseId: null, name: "Incline Dumbbell Press", tracking: "weight" as const, targetSets: 3, restSeconds: 90 },
-          { id: "3", exerciseId: null, name: "Tricep Pushdown", tracking: "weight" as const, targetSets: 3, restSeconds: 60 },
-        ];
-
   return (
     <div className="min-h-screen bg-[#baa3d0] text-white pb-10 pt-4 px-4 select-none">
       <main className="max-w-sm mx-auto space-y-3.5">
-        <ActiveWorkoutLogger
-          planId={planId}
-          exercises={exercises}
-          previousSets={workout.previousSets}
-        />
+        {workout.exercises.length === 0 ? (
+          <>
+            <SubpageHeader title="Workout" href="/schedule" />
+            <section className="bg-[#141416] border border-white/[0.08] rounded-[34px] px-6 py-12 text-center shadow-[0_16px_36px_rgba(0,0,0,0.25)]">
+              <p className="font-editorial text-[28px] text-white leading-none">Geen oefeningen</p>
+              <p className="mt-3 text-[13px] text-[#a1a1aa]">
+                Dit plan heeft nog geen oefeningen. Voeg ze toe in je schema.
+              </p>
+              <Link
+                href="/schedule"
+                className="mt-6 inline-block bg-[#baa3d0] text-[#141416] rounded-full px-5 py-3 font-editorial text-[16px] tracking-wider apple-press"
+              >
+                NAAR SCHEMA
+              </Link>
+            </section>
+          </>
+        ) : (
+          <ActiveWorkoutLogger
+            planId={planId}
+            exercises={workout.exercises}
+            previousSets={workout.previousSets}
+          />
+        )}
       </main>
     </div>
   );
