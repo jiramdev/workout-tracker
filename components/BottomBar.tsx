@@ -9,6 +9,69 @@ import { LayoutGrid, Calendar, BarChart3, User } from "lucide-react";
 import { motion } from "motion/react";
 import { TAB_HREFS } from "@/lib/motion";
 
+function slidePages(page: HTMLElement, direction: 1 | -1, navigate: () => void) {
+  document.querySelectorAll("[data-page-clone]").forEach((node) => node.remove());
+  page.getAnimations().forEach((animation) => animation.cancel());
+
+  const width = window.innerWidth;
+  const clone = page.cloneNode(true) as HTMLElement;
+  clone.removeAttribute("id");
+  clone.setAttribute("data-page-clone", "");
+  clone.style.position = "fixed";
+  clone.style.top = "0";
+  clone.style.left = "0";
+  clone.style.width = `${width}px`;
+  clone.style.height = `${window.innerHeight}px`;
+  clone.style.margin = "0";
+  clone.style.zIndex = "40";
+  clone.style.overflow = "hidden";
+  clone.style.pointerEvents = "none";
+  clone.style.background = "#baa3d0";
+  clone.style.transform = "translate3d(0,0,0)";
+  document.body.appendChild(clone);
+
+  const timing: KeyframeAnimationOptions = {
+    duration: 450,
+    easing: "cubic-bezier(0.32, 0.72, 0, 1)",
+    fill: "both",
+  };
+  const incoming = page.animate(
+    [
+      { transform: `translate3d(${direction * width}px, 0, 0)` },
+      { transform: "translate3d(0, 0, 0)" },
+    ],
+    timing
+  );
+  const outgoing = clone.animate(
+    [
+      { transform: "translate3d(0, 0, 0)" },
+      { transform: `translate3d(${direction * -width}px, 0, 0)` },
+    ],
+    timing
+  );
+
+  const body = document.body;
+  const previousOverflow = body.style.overflowX;
+  body.style.overflowX = "hidden";
+
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    incoming.cancel();
+    outgoing.cancel();
+    clone.remove();
+    page.style.transform = "";
+    page.style.willChange = "";
+    body.style.overflowX = previousOverflow;
+  };
+
+  page.style.willChange = "transform";
+  navigate();
+  incoming.onfinish = finish;
+  window.setTimeout(finish, 520);
+}
+
 const TABS = [
   { href: TAB_HREFS[0], icon: LayoutGrid, label: "Workouts" },
   { href: TAB_HREFS[1], icon: Calendar, label: "Schema" },
@@ -66,50 +129,11 @@ export default function BottomBar() {
                 if (!page || reduce) return;
 
                 event.preventDefault();
-                const direction = slide === "nav-forward" ? 1 : -1;
-                document.querySelectorAll("[data-page-clone]").forEach((node) => node.remove());
-                page.style.transition = "none";
-                page.style.transform = "";
-
-                const clone = page.cloneNode(true) as HTMLElement;
-                clone.removeAttribute("id");
-                clone.setAttribute("data-page-clone", "");
-                clone.style.position = "fixed";
-                clone.style.inset = "0";
-                clone.style.zIndex = "40";
-                clone.style.overflow = "hidden";
-                clone.style.pointerEvents = "none";
-                clone.style.margin = "0";
-                clone.style.transform = "translateX(0)";
-                clone.style.transition = "none";
-                document.body.appendChild(clone);
-
-                const html = document.documentElement;
-                const previousOverflow = html.style.overflowX;
-                html.style.overflowX = "clip";
-                page.style.transform = `translateX(${direction * 100}%)`;
-
-                let finished = false;
-                const finish = () => {
-                  if (finished) return;
-                  finished = true;
-                  clone.remove();
-                  page.style.transition = "none";
-                  page.style.transform = "";
-                  html.style.overflowX = previousOverflow;
-                };
-
-                router.push(tab.href);
-                window.requestAnimationFrame(() => {
-                  window.requestAnimationFrame(() => {
-                    const timing = "transform 450ms cubic-bezier(0.32, 0.72, 0, 1)";
-                    clone.style.transition = timing;
-                    page.style.transition = timing;
-                    clone.style.transform = `translateX(${direction * -100}%)`;
-                    page.style.transform = "translateX(0)";
-                  });
-                });
-                window.setTimeout(finish, 540);
+                try {
+                  slidePages(page, slide === "nav-forward" ? 1 : -1, () => router.push(tab.href));
+                } catch {
+                  router.push(tab.href);
+                }
               }}
               className={`p-2 rounded-full transition apple-press flex items-center justify-center relative ${
                 isActive ? "text-white" : "text-[#71717a] hover:text-[#a1a1aa]"
