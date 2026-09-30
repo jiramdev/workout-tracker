@@ -1,59 +1,53 @@
-// app/schedule/page.tsx
+// app/plans/[id]/page.tsx
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { redirect } from "next/navigation";
+import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
-import ScheduleManager from "./ScheduleManager";
+import PlanEditor from "./PlanEditor";
 
-export default async function SchedulePage() {
+interface PageProps {
+  params: Promise<{ id: string }>;
+}
+
+export default async function EditPlanPage({ params }: PageProps) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) redirect("/login");
 
-  const userId = session.user.id;
+  const { id } = await params;
 
-  // 1. Alle plannen ophalen inclusief aantal oefeningen
-  const rawPlans = await prisma.workoutPlan.findMany({
-    where: { userId },
+  // Haal het plan op van de ingelogde gebruiker
+  const plan = await (prisma as any).workoutPlan.findFirst({
+    where: {
+      id,
+      userId: session.user.id,
+    },
     include: {
       exercises: {
-        select: { id: true },
+        orderBy: { order: "asc" },
       },
     },
-    orderBy: { name: "asc" },
   });
 
-  const plans = rawPlans.map((p) => ({
-    id: p.id,
-    name: p.name,
-    exercisesCount: p.exercises.length,
-  }));
-
-  // 2. Weekrooster ophalen via WeeklySchedule
-  const weeklySchedule = await prisma.weeklySchedule.findUnique({
-    where: { userId },
-    include: {
-      days: true,
-    },
-  });
-
-  const initialDays: Record<number, string> = {};
-  if (weeklySchedule?.days) {
-    weeklySchedule.days.forEach((d) => {
-      if (d.planId) {
-        initialDays[d.dayOfWeek] = d.planId;
-      }
-    });
+  if (!plan) {
+    notFound();
   }
+
+  const formattedExercises = (plan.exercises || []).map((e: any) => ({
+    id: e.id,
+    name: e.name,
+    targetSets: e.targetSets,
+    restSeconds: e.restSeconds,
+  }));
 
   return (
     <div className="min-h-screen bg-[#baa3d0] text-white pb-32 pt-4 px-4 select-none">
       <main className="max-w-sm mx-auto space-y-3.5">
-        {/* Header */}
+        {/* Top Header: Terug links, Pill rechts */}
         <header className="flex justify-between items-center px-1 py-1">
           <Link
-            href="/"
+            href="/schedule"
             className="w-10 h-10 rounded-full bg-[#141416] border border-white/[0.08] flex items-center justify-center text-[#a1a1aa] hover:text-white transition apple-press shadow-[0_4px_12px_rgba(0,0,0,0.15)]"
           >
             <ChevronLeft className="w-5 h-5 stroke-[2]" />
@@ -62,13 +56,17 @@ export default async function SchedulePage() {
           <div className="h-10 bg-[#141416] border border-white/[0.08] px-4 rounded-full flex items-center gap-2 shadow-[0_4px_12px_rgba(0,0,0,0.15)]">
             <span className="w-2 h-2 rounded-full bg-[#baa3d0]" />
             <span className="font-editorial text-[14px] tracking-wider text-white leading-none uppercase">
-              SCHEMA & ROOSTER
+              BEWERK PLAN
             </span>
           </div>
         </header>
 
-        {/* Manager component */}
-        <ScheduleManager plans={plans} initialDays={initialDays} />
+        {/* Het interactieve bewerkingsscherm */}
+        <PlanEditor
+          planId={plan.id}
+          initialName={plan.name}
+          exercises={formattedExercises}
+        />
       </main>
     </div>
   );
