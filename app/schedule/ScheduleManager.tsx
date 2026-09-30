@@ -3,7 +3,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { AnimatePresence, motion } from "motion/react";
 import Prefetch from "@/components/Prefetch";
+import { popTransition } from "@/lib/motion";
 import { Plus, Dumbbell, ChevronRight, Moon, Sparkles } from "lucide-react";
 import { assignPlanToDay, createWorkoutPlan } from "./actions";
 
@@ -100,8 +102,15 @@ export default function ScheduleManager({ plans, initialDays }: ScheduleManagerP
                 </button>
 
                 {/* Dropdown / Modal om plan te kiezen voor deze dag */}
+                <AnimatePresence>
                 {activeDayPicker === day && (
-                  <div className="mt-2 bg-[#202026] border border-white/[0.08] rounded-2xl p-2 space-y-1 shadow-[0_12px_28px_rgba(0,0,0,0.4)] z-20">
+                  <motion.div
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={popTransition}
+                    className="mt-2 bg-[#202026] border border-white/[0.08] rounded-2xl p-2 space-y-1 shadow-[0_12px_28px_rgba(0,0,0,0.4)] z-20"
+                  >
                     <button
                       onClick={() => handleSelectPlanForDay(day, null)}
                       className={`w-full px-3 py-2.5 rounded-xl text-left text-[13px] flex items-center gap-2 transition ${
@@ -133,8 +142,9 @@ export default function ScheduleManager({ plans, initialDays }: ScheduleManagerP
                         </span>
                       </button>
                     ))}
-                  </div>
+                  </motion.div>
                 )}
+                </AnimatePresence>
               </div>
             );
           })}
@@ -157,8 +167,16 @@ export default function ScheduleManager({ plans, initialDays }: ScheduleManagerP
         </div>
 
         {/* Inline formulier om nieuw plan aan te maken */}
+        <AnimatePresence>
         {isCreatingPlan && (
-          <form onSubmit={handleCreatePlan} className="pt-1 pb-2 flex gap-2">
+          <motion.form
+            onSubmit={handleCreatePlan}
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={popTransition}
+            className="pt-1 pb-2 flex gap-2"
+          >
             <input
               type="text"
               placeholder="Bijv. Push A of Upper Body"
@@ -173,8 +191,9 @@ export default function ScheduleManager({ plans, initialDays }: ScheduleManagerP
             >
               Opslaan
             </button>
-          </form>
+          </motion.form>
         )}
+        </AnimatePresence>
 
         {/* Lijst met gemaakte plannen */}
         <div className="space-y-2 pt-1">

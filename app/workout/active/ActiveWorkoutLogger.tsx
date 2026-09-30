@@ -4,6 +4,8 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, X, Plus } from "lucide-react";
+import { motion } from "motion/react";
+import { popTransition } from "@/lib/motion";
 import { finishWorkout } from "./actions";
 
 interface Exercise {
@@ -114,7 +116,12 @@ function RestTimer({
   if (secondsRemaining == null) return null;
 
   return (
-    <div className="fixed top-4 left-0 right-0 z-[999] flex justify-center px-4 pointer-events-none">
+    <motion.div
+      initial={{ opacity: 0, y: -12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={popTransition}
+      className="fixed top-4 left-0 right-0 z-[999] flex justify-center px-4 pointer-events-none"
+    >
       <div className="pointer-events-auto bg-[#141416] border border-[#baa3d0]/40 rounded-full pl-5 pr-3 py-2 flex items-center gap-4 shadow-[0_16px_36px_rgba(0,0,0,0.6)]">
         <div className="flex items-baseline gap-2">
           <span className="font-editorial text-[24px] tracking-wider text-[#baa3d0] leading-none">
@@ -145,7 +152,7 @@ function RestTimer({
           </button>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 

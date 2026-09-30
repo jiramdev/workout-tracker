@@ -2,6 +2,8 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
+import { motion, useReducedMotion } from "motion/react";
+import { enterTransition } from "@/lib/motion";
 import { markNotificationsRead } from "./actions";
 
 export interface NotificationItem {
@@ -22,7 +24,14 @@ function formatWhen(iso: string) {
   }).format(new Date(iso));
 }
 
+const itemMotion = {
+  hidden: { opacity: 0, y: 10 },
+  show: { opacity: 1, y: 0, transition: enterTransition },
+};
+
 export default function NotificationList({ items }: { items: NotificationItem[] }) {
+  const reduce = useReducedMotion();
+
   useEffect(() => {
     if (items.some((item) => !item.read)) markNotificationsRead();
   }, [items]);
@@ -39,7 +48,12 @@ export default function NotificationList({ items }: { items: NotificationItem[] 
   }
 
   return (
-    <div className="space-y-2.5">
+    <motion.div
+      className="space-y-2.5"
+      initial={reduce ? false : "hidden"}
+      animate="show"
+      variants={{ show: { transition: { staggerChildren: reduce ? 0 : 0.045 } } }}
+    >
       {items.map((item) => {
         const inner = (
           <>
@@ -61,18 +75,20 @@ export default function NotificationList({ items }: { items: NotificationItem[] 
 
         if (!item.href) {
           return (
-            <article key={item.id} className={className}>
+            <motion.article key={item.id} variants={itemMotion} className={className}>
               {inner}
-            </article>
+            </motion.article>
           );
         }
 
         return (
-          <Link key={item.id} href={item.href} className={`${className} apple-press`}>
-            {inner}
-          </Link>
+          <motion.div key={item.id} variants={itemMotion}>
+            <Link href={item.href} className={`${className} apple-press`}>
+              {inner}
+            </Link>
+          </motion.div>
         );
       })}
-    </div>
+    </motion.div>
   );
 }

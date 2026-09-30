@@ -6,6 +6,7 @@ import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { PrefetchKind } from "next/dist/client/components/router-reducer/router-reducer-types";
 import { LayoutGrid, Calendar, BarChart3, User } from "lucide-react";
+import { motion } from "motion/react";
 
 const TABS = [
   { href: "/", icon: LayoutGrid, label: "Workouts" },
@@ -46,7 +47,11 @@ export default function BottomBar() {
             >
               <Icon className="w-5 h-5 stroke-[1.8]" />
               {isActive && (
-                <span className="absolute -bottom-1 w-1 h-1 bg-[#baa3d0] rounded-full" />
+                <motion.span
+                  layoutId="tab-dot"
+                  className="absolute -bottom-1 w-1 h-1 bg-[#baa3d0] rounded-full"
+                  transition={{ type: "spring", stiffness: 520, damping: 34 }}
+                />
               )}
             </Link>
           );
