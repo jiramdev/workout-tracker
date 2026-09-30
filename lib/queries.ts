@@ -21,7 +21,7 @@ export function getDashboard(userId: string) {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    const [scheduleDay, latestWeight, monthlyLogs] = await Promise.all([
+    const [scheduleDay, latestWeight, monthlyLogs, user] = await Promise.all([
       prisma.scheduleDay.findFirst({
         where: {
           schedule: { userId },
@@ -46,6 +46,10 @@ export function getDashboard(userId: string) {
         where: { userId, completedAt: { gte: startOfMonth } },
         select: { completedAt: true },
       }),
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: { name: true, email: true },
+      }),
     ]);
 
     const trainedDaysCount = new Set(
@@ -63,6 +67,8 @@ export function getDashboard(userId: string) {
           }
         : null,
       latestWeight: latestWeight?.weight ?? null,
+      profileName: user?.name ?? null,
+      profileEmail: user?.email ?? null,
       trainedDaysCount,
       dayOfWeek: now.getDay(),
     };

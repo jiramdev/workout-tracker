@@ -11,7 +11,7 @@ const TABS = [
   { href: "/", icon: LayoutGrid, label: "Workouts" },
   { href: "/schedule", icon: Calendar, label: "Schema" },
   { href: "/analytics", icon: BarChart3, label: "Stats" },
-  { href: "/weight/log", icon: User, label: "Gewicht" },
+  { href: "/account", icon: User, label: "Account" },
 ];
 
 export default function BottomBar() {

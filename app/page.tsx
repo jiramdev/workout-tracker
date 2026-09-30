@@ -21,24 +21,23 @@ export default async function HomePage() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) redirect("/login");
 
-  const { todayPlan, latestWeight, trainedDaysCount, dayOfWeek } = await getDashboard(
-    session.user.id
-  );
+  const { todayPlan, latestWeight, trainedDaysCount, dayOfWeek, profileName, profileEmail } =
+    await getDashboard(session.user.id);
 
-  const displayName = session.user.name || session.user.email?.split("@")[0] || "ATHLETE";
+  const displayName = profileName || profileEmail?.split("@")[0] || "ATHLETE";
   const userInitial = displayName.charAt(0).toUpperCase();
   const workoutHref = todayPlan ? `/workout/active?planId=${todayPlan.id}` : "/schedule";
 
   return (
     <div className="min-h-screen bg-[#baa3d0] text-white pb-32 pt-4 px-4 select-none">
-      <Prefetch hrefs={[workoutHref]} />
+      <Prefetch hrefs={[workoutHref, "/account"]} />
       <main className="max-w-sm mx-auto space-y-3.5">
         {/* Top Header: Account Pill links & Instellingen rechts */}
         <header className="flex justify-between items-center px-1 py-1">
           {/* Pill knop naar Account met avatar */}
           <Link
             href="/account"
-            prefetch={false}
+            prefetch={true}
             className="h-10 bg-[#141416] border border-white/[0.08] pl-1.5 pr-4 rounded-full flex items-center gap-2.5 shadow-[0_4px_12px_rgba(0,0,0,0.15)] transition apple-press"
           >
             {session.user.image ? (
@@ -109,7 +108,8 @@ export default async function HomePage() {
 
           {/* Widget Rechts: Gewicht */}
           <Link
-            href="/weight/log"
+            href="/account"
+            prefetch={true}
             className="bg-[#141416] border border-white/[0.08] rounded-[30px] p-5 text-center flex flex-col justify-between items-center aspect-square shadow-[0_12px_28px_rgba(0,0,0,0.2)] transition apple-press"
           >
             <span className="text-[11px] font-semibold tracking-[0.18em] text-[#baa3d0] uppercase">
