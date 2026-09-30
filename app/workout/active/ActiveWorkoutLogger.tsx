@@ -340,35 +340,6 @@ export default function ActiveWorkoutLogger({
     setRestTarget(null);
   }, []);
 
-  const finishRest = useCallback(() => {
-    const exerciseName = localStorage.getItem(STORAGE_EXERCISE_KEY) || "je oefening";
-    clearTimer();
-
-    if (typeof window === "undefined" || !("Notification" in window)) return;
-    if (Notification.permission !== "granted") return;
-
-    const title = "Rust voorbij ⚡️";
-    const body = `Tijd voor je volgende set van ${exerciseName}!`;
-    const options = {
-      body,
-      icon: "/icon.png",
-      badge: "/icon.png",
-      tag: "rest-over",
-      renotify: true,
-    };
-
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.ready
-        .then((reg) => reg.showNotification(title, options))
-        .catch(() => {
-          new Notification(title, { body });
-        });
-      return;
-    }
-
-    new Notification(title, { body });
-  }, [clearTimer]);
-
   const startRestTimer = useCallback(
     (seconds: number, exerciseName: string) => {
       if (typeof window !== "undefined" && "Notification" in window) {
@@ -462,7 +433,7 @@ export default function ActiveWorkoutLogger({
         target={restTarget}
         onAdd={addTime}
         onCancel={clearTimer}
-        onExpire={finishRest}
+        onExpire={clearTimer}
       />
 
       {exercises.map((ex) => (
