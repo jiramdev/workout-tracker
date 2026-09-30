@@ -39,9 +39,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="nl" className="dark">
+    <html lang="nl" className="dark" style={{ backgroundColor: "#baa3d0" }}>
       <body
         className={`${inter.variable} ${anton.variable} font-sans antialiased min-h-screen selection:bg-[#141416] selection:text-[#baa3d0]`}
+        style={{ backgroundColor: "#baa3d0" }}
       >
         {children}
         <BottomBar />

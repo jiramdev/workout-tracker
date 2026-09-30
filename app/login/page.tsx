@@ -1,10 +1,12 @@
-// app/login/page.tsx
 "use client";
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+
+const fieldClass =
+  "w-full bg-[#1b1b1e] border border-white/[0.08] rounded-2xl px-4 py-3 text-[15px] text-white outline-none focus:border-[#baa3d0] placeholder:text-[#52525b]";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -36,62 +38,65 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-zinc-950 text-zinc-100">
-      <div className="w-full max-w-md p-8 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-xl space-y-6">
-        <div className="text-center space-y-2">
-          <h1 className="text-2xl font-bold tracking-tight">Welkom terug</h1>
-          <p className="text-sm text-zinc-400">Log in om je workouts te bekijken</p>
+    <div className="min-h-screen bg-[#baa3d0] px-4 py-10 flex items-center justify-center select-none">
+      <main className="w-full max-w-sm space-y-4">
+        <div className="text-center pb-1">
+          <h1 className="font-editorial text-[64px] text-[#141416] leading-none">GYM</h1>
+          <p className="mt-3 text-[12px] font-semibold tracking-[0.22em] text-[#141416]/70 uppercase">
+            Welkom terug
+          </p>
         </div>
 
-        {error && (
-          <div className="p-3 text-sm bg-red-950/50 border border-red-800 text-red-200 rounded-lg text-center">
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold uppercase text-zinc-400 mb-1">
-              E-mailadres
-            </label>
+        <form
+          onSubmit={handleSubmit}
+          className="bg-[#141416] border border-white/[0.08] rounded-[34px] p-6 space-y-4 shadow-[0_16px_36px_rgba(0,0,0,0.25)]"
+        >
+          <label className="block space-y-1.5">
+            <span className="px-1 text-[11px] font-semibold tracking-wider text-[#71717a] uppercase">
+              E-mail
+            </span>
             <input
               type="email"
               name="email"
               required
+              autoComplete="email"
               placeholder="naam@voorbeeld.nl"
-              className="w-full px-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-500 text-sm"
+              className={fieldClass}
             />
-          </div>
+          </label>
 
-          <div>
-            <label className="block text-xs font-semibold uppercase text-zinc-400 mb-1">
+          <label className="block space-y-1.5">
+            <span className="px-1 text-[11px] font-semibold tracking-wider text-[#71717a] uppercase">
               Wachtwoord
-            </label>
+            </span>
             <input
               type="password"
               name="password"
               required
+              autoComplete="current-password"
               placeholder="••••••••"
-              className="w-full px-4 py-2.5 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-zinc-500 text-sm"
+              className={fieldClass}
             />
-          </div>
+          </label>
+
+          {error && <p className="px-1 text-[13px] text-red-300">{error}</p>}
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 bg-white text-zinc-900 hover:bg-zinc-200 font-semibold rounded-lg text-sm transition disabled:opacity-50 cursor-pointer"
+            className="w-full bg-[#baa3d0] text-[#141416] rounded-full py-3.5 font-editorial text-[18px] tracking-wider disabled:opacity-50 apple-press"
           >
-            {loading ? "Inloggen..." : "Inloggen"}
+            {loading ? "INLOGGEN..." : "INLOGGEN"}
           </button>
         </form>
 
-        <p className="text-center text-xs text-zinc-400">
+        <p className="text-center text-[13px] text-[#141416]/80">
           Nog geen account?{" "}
-          <Link href="/register" className="text-white hover:underline font-medium">
+          <Link href="/register" className="font-semibold text-[#141416] underline underline-offset-2">
             Account maken
           </Link>
         </p>
-      </div>
+      </main>
     </div>
   );
 }

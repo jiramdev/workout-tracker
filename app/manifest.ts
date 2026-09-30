@@ -8,8 +8,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Persoonlijke workout en voortgang tracker",
     start_url: "/",
     display: "standalone",
-    background_color: "#09090b",
-    theme_color: "#09090b",
+    background_color: "#baa3d0",
+    theme_color: "#baa3d0",
     icons: [
       {
         src: "/icon-192.png",

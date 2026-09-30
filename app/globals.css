@@ -5,8 +5,12 @@
   --lilac-card-border: rgba(255, 255, 255, 0.1);
 }
 
+html,
 body {
   background-color: #baa3d0;
+}
+
+body {
   color: #ffffff;
   -webkit-font-smoothing: antialiased;
   letter-spacing: -0.015em;
