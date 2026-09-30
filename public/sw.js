@@ -7,9 +7,13 @@ self.addEventListener("install", (event) => {
     event.waitUntil(self.clients.claim());
   });
   
-  // Luister naar server-push
   self.addEventListener("push", (event) => {
-    let data = { title: "Rust voorbij ⚡️", body: "Tijd voor je volgende set!" };
+    let data = {
+      title: "Rust voorbij ⚡️",
+      body: "Tijd voor je volgende set!",
+      url: "/workout/active",
+    };
+  
     if (event.data) {
       try {
         data = event.data.json();
@@ -31,32 +35,30 @@ self.addEventListener("install", (event) => {
     event.waitUntil(self.registration.showNotification(data.title, options));
   });
   
-  // Luister naar lokaal bericht vanuit de timer
-  self.addEventListener("message", (event) => {
-    if (event.data && event.data.type === "TRIGGER_REST_NOTIFICATION") {
-      const { exerciseName } = event.data;
-      self.registration.showNotification("Rust voorbij ⚡️", {
-        body: `Tijd voor je volgende set van ${exerciseName || "je oefening"}!`,
-        icon: "/icon.png",
-        badge: "/icon.png",
-        vibrate: [300, 150, 300],
-        data: { url: "/workout/active" },
-      });
-    }
-  });
-  
+  // Zorg dat aantikken van de notificatie betrouwbaar de actieve sessie opent
   self.addEventListener("notificationclick", (event) => {
     event.notification.close();
+  
+    const targetUrl = event.notification.data?.url || "/workout/active";
+  
     event.waitUntil(
-      clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
-        for (const client of clientList) {
-          if (client.url.includes("/workout/active") && "focus" in client) {
-            return client.focus();
+      self.clients
+        .matchAll({ type: "window", includeUncontrolled: true })
+        .then((clientList) => {
+          // 1. Zoek naar een bestaand venster/tab van de app
+          for (const client of clientList) {
+            if ("focus" in client) {
+              // Navigeer het geopende venster direct naar de juiste URL en focus
+              if ("navigate" in client) {
+                client.navigate(targetUrl);
+              }
+              return client.focus();
+            }
           }
-        }
-        if (clients.openWindow) {
-          return clients.openWindow("/workout/active");
-        }
-      })
+          // 2. Geen bestaand venster gevonden: open een nieuw PWA window
+          if (self.clients.openWindow) {
+            return self.clients.openWindow(targetUrl);
+          }
+        })
     );
   });

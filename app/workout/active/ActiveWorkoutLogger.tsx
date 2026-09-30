@@ -130,6 +130,7 @@ export default function ActiveWorkoutLogger({
             subscription: sub,
             delaySeconds: seconds,
             exerciseName,
+            planId,
           }),
         });
         const result = await res.json();
