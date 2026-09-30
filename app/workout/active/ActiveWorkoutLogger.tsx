@@ -26,19 +26,9 @@ interface SetRow {
   isCompleted: boolean;
 }
 
-const STORAGE_KEY = "active_workout_rest_target";
-
-// Helper om base64 public key om te zetten naar Uint8Array voor push registration
-function urlBase64ToUint8Array(base64String: string) {
-  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
-  const rawData = window.atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-  for (let i = 0; i < rawData.length; ++i) {
-    outputArray[i] = rawData.charCodeAt(i);
-  }
-  return outputArray;
-}
+const STORAGE_TARGET_KEY = "active_workout_rest_target";
+const STORAGE_EXERCISE_KEY = "active_workout_rest_exercise";
+const STORAGE_NOTIFIED_KEY = "active_workout_rest_notified";
 
 export default function ActiveWorkoutLogger({
   planId,
@@ -49,7 +39,7 @@ export default function ActiveWorkoutLogger({
   const [startedAt] = useState<string>(new Date().toISOString());
   const [isFinishing, setIsFinishing] = useState(false);
   const [secondsRemaining, setSecondsRemaining] = useState<number | null>(null);
-  const pushSubscriptionRef = useRef<PushSubscription | null>(null);
+  const swRegistrationRef = useRef<ServiceWorkerRegistration | null>(null);
 
   const [setsData, setSetsData] = useState<Record<string, SetRow[]>>(() => {
     const initial: Record<string, SetRow[]> = {};
@@ -65,22 +55,42 @@ export default function ActiveWorkoutLogger({
     return initial;
   });
 
-  // Service Worker registreren bij laden
+  // Service Worker registreren
   useEffect(() => {
-    if ("serviceWorker" in navigator && "PushManager" in window) {
-      navigator.serviceWorker.register("/sw.js").then(async (reg) => {
-        const sub = await reg.pushManager.getSubscription();
-        if (sub) {
-          pushSubscriptionRef.current = sub;
-        }
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").then((reg) => {
+        swRegistrationRef.current = reg;
       });
     }
   }, []);
 
-  // Sync timer vanuit localStorage (blijft kloppen na app-switch)
+  // Notificatie afvuren via Service Worker
+  const triggerNotification = useCallback((exerciseName: string) => {
+    if (Notification.permission !== "granted") return;
+
+    if (navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({
+        type: "TRIGGER_REST_NOTIFICATION",
+        exerciseName,
+      });
+    } else if (swRegistrationRef.current) {
+      swRegistrationRef.current.showNotification("Rust voorbij ⚡️", {
+        body: `Tijd voor je volgende set van ${exerciseName || "je oefening"}!`,
+        icon: "/icon.png",
+        badge: "/icon.png",
+      });
+    } else {
+      new Notification("Rust voorbij ⚡️", {
+        body: `Tijd voor je volgende set van ${exerciseName || "je oefening"}!`,
+        icon: "/icon.png",
+      });
+    }
+  }, []);
+
+  // Timer synchronisatie & inspectie
   const checkTimerSync = useCallback(() => {
     if (typeof window === "undefined") return;
-    const storedTarget = localStorage.getItem(STORAGE_KEY);
+    const storedTarget = localStorage.getItem(STORAGE_TARGET_KEY);
     if (!storedTarget) {
       setSecondsRemaining(null);
       return;
@@ -91,69 +101,51 @@ export default function ActiveWorkoutLogger({
     const remaining = Math.max(0, Math.ceil((targetTime - now) / 1000));
 
     if (remaining <= 0) {
-      localStorage.removeItem(STORAGE_KEY);
+      // Is er al een notificatie gestuurd voor deze specifieke rusttimer?
+      const alreadyNotified = localStorage.getItem(STORAGE_NOTIFIED_KEY) === "true";
+      const exerciseName = localStorage.getItem(STORAGE_EXERCISE_KEY) || "";
+
+      if (!alreadyNotified) {
+        localStorage.setItem(STORAGE_NOTIFIED_KEY, "true");
+        triggerNotification(exerciseName);
+      }
+
+      localStorage.removeItem(STORAGE_TARGET_KEY);
+      localStorage.removeItem(STORAGE_EXERCISE_KEY);
       setSecondsRemaining(null);
     } else {
       setSecondsRemaining(remaining);
     }
-  }, []);
+  }, [triggerNotification]);
 
-  const schedulePushNotification = async (seconds: number, exerciseName: string) => {
-    try {
-      if (!("serviceWorker" in navigator) || !process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY) return;
-
-      // Vraag permissie aan indien nodig
+  // Start timer
+  const startRestTimer = async (seconds: number, exerciseName: string) => {
+    if (typeof window !== "undefined" && "Notification" in window) {
       if (Notification.permission === "default") {
         await Notification.requestPermission();
       }
-
-      if (Notification.permission !== "granted") return;
-
-      const reg = await navigator.serviceWorker.ready;
-      let sub = pushSubscriptionRef.current;
-
-      if (!sub) {
-        sub = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY),
-        });
-        pushSubscriptionRef.current = sub;
-      }
-
-      // Stuur background delay request naar Next.js API
-      await fetch("/api/rest-timer", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          subscription: sub,
-          delaySeconds: seconds,
-          exerciseName,
-        }),
-      });
-    } catch (e) {
-      console.error("Push schedule fout:", e);
     }
-  };
 
-  const startRestTimer = (seconds: number, exerciseName: string) => {
     const targetTimestamp = Date.now() + seconds * 1000;
-    localStorage.setItem(STORAGE_KEY, targetTimestamp.toString());
+    localStorage.setItem(STORAGE_TARGET_KEY, targetTimestamp.toString());
+    localStorage.setItem(STORAGE_EXERCISE_KEY, exerciseName);
+    localStorage.removeItem(STORAGE_NOTIFIED_KEY);
     setSecondsRemaining(seconds);
-
-    // Stuur direct de push in voor op de achtergrond
-    schedulePushNotification(seconds, exerciseName);
   };
 
   const addTime = (extraSeconds: number) => {
-    const storedTarget = localStorage.getItem(STORAGE_KEY);
+    const storedTarget = localStorage.getItem(STORAGE_TARGET_KEY);
     const base = storedTarget ? parseInt(storedTarget, 10) : Date.now();
     const newTarget = Math.max(Date.now(), base) + extraSeconds * 1000;
-    localStorage.setItem(STORAGE_KEY, newTarget.toString());
+    localStorage.setItem(STORAGE_TARGET_KEY, newTarget.toString());
+    localStorage.removeItem(STORAGE_NOTIFIED_KEY);
     checkTimerSync();
   };
 
   const cancelTimer = () => {
-    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(STORAGE_TARGET_KEY);
+    localStorage.removeItem(STORAGE_EXERCISE_KEY);
+    localStorage.removeItem(STORAGE_NOTIFIED_KEY);
     setSecondsRemaining(null);
   };
 
@@ -162,9 +154,7 @@ export default function ActiveWorkoutLogger({
     const interval = setInterval(checkTimerSync, 500);
 
     const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
-        checkTimerSync();
-      }
+      checkTimerSync();
     };
 
     window.addEventListener("visibilitychange", handleVisibility);
