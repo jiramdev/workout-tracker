@@ -4,8 +4,8 @@
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { revalidatePath } from "next/cache";
 import { refreshUserCache } from "@/lib/queries";
+import { revalidateTabs } from "@/lib/revalidate-tabs";
 import { exerciseKey } from "@/lib/exercises";
 
 interface CompletedSet {
@@ -14,6 +14,7 @@ interface CompletedSet {
   setNumber: number;
   weight: number;
   reps: number;
+  durationSeconds?: number | null;
 }
 
 export async function finishWorkout({
@@ -54,6 +55,8 @@ export async function finishWorkout({
             setNumber: set.setNumber,
             weight: Number(set.weight) || 0,
             reps: Number(set.reps) || 0,
+            durationSeconds:
+              set.durationSeconds == null ? null : Number(set.durationSeconds) || 0,
           };
         }),
       },
@@ -61,7 +64,6 @@ export async function finishWorkout({
   });
 
   refreshUserCache(userId);
-  revalidatePath("/");
-  revalidatePath("/analytics");
+  revalidateTabs();
   return { success: true, workoutLogId: workoutLog.id };
 }

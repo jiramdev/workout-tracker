@@ -1,53 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { PrefetchKind } from "next/dist/client/components/router-reducer/router-reducer-types";
 
 const AUTH_ROUTES = ["/login", "/register"];
-
-function sameRoute(href: string, pathname: string, search: string) {
-  const target = new URL(href, window.location.origin);
-  return target.pathname === pathname && target.search === search;
-}
-
-function entryMatches(entryName: string, href: string) {
-  const entry = new URL(entryName);
-  const target = new URL(href, window.location.origin);
-  if (entry.pathname !== target.pathname) return false;
-  const planId = target.searchParams.get("planId");
-  if (planId) return entry.searchParams.get("planId") === planId;
-  return true;
-}
-
-function waitForPrefetch(prefetch: (href: string) => void, href: string) {
-  const started = performance.now();
-  prefetch(href);
-
-  return new Promise<void>((resolve) => {
-    const timer = window.setInterval(() => {
-      const elapsed = performance.now() - started;
-      const entries = performance.getEntriesByType("resource") as PerformanceResourceTiming[];
-      let sawRequest = false;
-
-      for (const entry of entries) {
-        if (entry.startTime < started - 50) continue;
-        if (!entryMatches(entry.name, href)) continue;
-        sawRequest = true;
-        if (entry.responseEnd > 0) {
-          window.clearInterval(timer);
-          resolve();
-          return;
-        }
-      }
-
-      if ((!sawRequest && elapsed > 800) || elapsed > 12000) {
-        window.clearInterval(timer);
-        resolve();
-      }
-    }, 40);
-  });
-}
 
 export default function LaunchScreen() {
   const pathname = usePathname();
@@ -61,11 +18,14 @@ export default function LaunchScreen() {
   const signingUp = pathname.startsWith("/onboarding");
   const show = !finished && !AUTH_ROUTES.includes(pathname) && !signingUp;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (AUTH_ROUTES.includes(pathname) || pathname.startsWith("/onboarding")) {
       document.getElementById("boot-splash")?.remove();
-      return;
     }
+  }, [pathname]);
+
+  useEffect(() => {
+    if (AUTH_ROUTES.includes(pathname) || pathname.startsWith("/onboarding")) return;
     if (started.current) return;
     started.current = true;
 
@@ -75,48 +35,17 @@ export default function LaunchScreen() {
       return;
     }
 
-    const prefetch = (href: string) => {
-      routerRef.current.prefetch(href, { kind: PrefetchKind.FULL });
-    };
-
-    (async () => {
-      let hrefs = ["/", "/schedule", "/analytics", "/account"];
-      try {
-        const response = await fetch("/api/launch");
-        if (response.ok) {
-          const data = (await response.json()) as { hrefs?: string[] };
-          if (data.hrefs?.length) hrefs = data.hrefs;
-        }
-      } catch {
-        // The main tabs are still warmed below.
-      }
-
-      const search = window.location.search;
-      const pending = hrefs.filter((href) => !sameRoute(href, pathname, search));
-      const total = pending.length + 1;
-      let done = 1;
-      setProgress(done / total);
-      const bootBar = document.getElementById("boot-bar");
-      if (bootBar) bootBar.style.width = `${(done / total) * 100}%`;
-
-      await Promise.all(
-        pending.map(async (href) => {
-          await waitForPrefetch(prefetch, href);
-          done += 1;
-          setProgress(done / total);
-          const bar = document.getElementById("boot-bar");
-          if (bar) bar.style.width = `${(done / total) * 100}%`;
-        })
-      );
-
-      setProgress(1);
-      const bar = document.getElementById("boot-bar");
-      if (bar) bar.style.width = "100%";
-      await new Promise((resolve) => window.setTimeout(resolve, 180));
+    const bar = document.getElementById("boot-bar");
+    if (bar) bar.style.width = "100%";
+    setProgress(1);
+    const timer = window.setTimeout(() => {
       sessionStorage.setItem("repiq-booted", "1");
       document.getElementById("boot-splash")?.remove();
       setFinished(true);
-    })();
+      routerRef.current.prefetch("/notifications", { kind: PrefetchKind.FULL });
+      routerRef.current.prefetch("/workout/active", { kind: PrefetchKind.FULL });
+    }, 280);
+    return () => window.clearTimeout(timer);
   }, [pathname]);
 
   if (!show) return null;

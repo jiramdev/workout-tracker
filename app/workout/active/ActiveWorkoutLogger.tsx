@@ -12,6 +12,7 @@ interface Exercise {
   id: string;
   exerciseId?: string | null;
   name: string;
+  tracking?: "weight" | "reps" | "hold";
   targetSets: number;
   restSeconds?: number;
 }
@@ -19,6 +20,7 @@ interface Exercise {
 interface PreviousSet {
   weight: number;
   reps: number;
+  durationSeconds?: number | null;
 }
 
 interface ActiveWorkoutLoggerProps {
@@ -31,6 +33,7 @@ interface SetRow {
   setNumber: number;
   weight: string;
   reps: string;
+  duration: string;
   isCompleted: boolean;
 }
 
@@ -153,12 +156,15 @@ const ExerciseSection = memo(function ExerciseSection({
   onUpdate: (
     exerciseName: string,
     setIndex: number,
-    field: "weight" | "reps",
+    field: "weight" | "reps" | "duration",
     value: string
   ) => void;
   onToggle: (exerciseName: string, setIndex: number, restDuration: number) => void;
 }) {
   const restDuration = exercise.restSeconds || 90;
+  const tracking = exercise.tracking ?? "weight";
+  const columns =
+    tracking === "weight" ? "grid-cols-[28px_1fr_1fr_36px]" : "grid-cols-[28px_1fr_36px]";
 
   return (
     <section className="bg-[#141416] border border-white/[0.08] rounded-[30px] p-5 space-y-3 shadow-[0_12px_28px_rgba(0,0,0,0.2)]">
@@ -171,10 +177,10 @@ const ExerciseSection = memo(function ExerciseSection({
         </span>
       </div>
 
-      <div className="grid grid-cols-[28px_1fr_1fr_36px] gap-2.5 px-2 text-[10px] uppercase font-semibold text-[#71717a] text-center">
+      <div className={`grid ${columns} gap-2.5 px-2 text-[10px] uppercase font-semibold text-[#71717a] text-center`}>
         <span>#</span>
-        <span>KG</span>
-        <span>REPS</span>
+        {tracking === "weight" && <span>KG</span>}
+        <span>{tracking === "hold" ? "SEC" : "REPS"}</span>
         <span></span>
       </div>
 
@@ -186,7 +192,7 @@ const ExerciseSection = memo(function ExerciseSection({
           return (
             <div
               key={row.setNumber}
-              className={`grid grid-cols-[28px_1fr_1fr_36px] gap-2.5 items-center rounded-2xl px-2 py-1.5 transition ${
+              className={`grid ${columns} gap-2.5 items-center rounded-2xl px-2 py-1.5 transition ${
                 isDone
                   ? "bg-[#1d1d22] border border-white/[0.06]"
                   : "bg-[#18181b] border border-transparent"
@@ -196,23 +202,35 @@ const ExerciseSection = memo(function ExerciseSection({
                 {row.setNumber}
               </span>
 
-              <input
-                type="number"
-                inputMode="decimal"
-                placeholder={previous ? String(previous.weight) : "—"}
-                value={row.weight}
-                disabled={isDone}
-                onChange={(e) => onUpdate(exercise.name, idx, "weight", e.target.value)}
-                className="w-full bg-[#121214] border border-white/[0.06] rounded-xl py-2 text-center font-mono text-[15px] font-medium text-white outline-none placeholder:text-[#71717a] focus:border-[#baa3d0] disabled:opacity-40"
-              />
+              {tracking === "weight" && (
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  placeholder={previous ? String(previous.weight) : "—"}
+                  value={row.weight}
+                  disabled={isDone}
+                  onChange={(e) => onUpdate(exercise.name, idx, "weight", e.target.value)}
+                  className="w-full bg-[#121214] border border-white/[0.06] rounded-xl py-2 text-center font-mono text-[15px] font-medium text-white outline-none placeholder:text-[#71717a] focus:border-[#baa3d0] disabled:opacity-40"
+                />
+              )}
 
               <input
                 type="number"
                 inputMode="numeric"
-                placeholder={previous ? String(previous.reps) : "—"}
-                value={row.reps}
+                placeholder={
+                  tracking === "hold"
+                    ? previous?.durationSeconds
+                      ? String(previous.durationSeconds)
+                      : "—"
+                    : previous
+                      ? String(previous.reps)
+                      : "—"
+                }
+                value={tracking === "hold" ? row.duration : row.reps}
                 disabled={isDone}
-                onChange={(e) => onUpdate(exercise.name, idx, "reps", e.target.value)}
+                onChange={(e) =>
+                  onUpdate(exercise.name, idx, tracking === "hold" ? "duration" : "reps", e.target.value)
+                }
                 className="w-full bg-[#121214] border border-white/[0.06] rounded-xl py-2 text-center font-mono text-[15px] font-medium text-white outline-none placeholder:text-[#71717a] focus:border-[#baa3d0] disabled:opacity-40"
               />
 
@@ -246,6 +264,7 @@ function emptySets(exercises: Exercise[]): Record<string, SetRow[]> {
       setNumber: idx + 1,
       weight: "",
       reps: "",
+      duration: "",
       isCompleted: false,
     }));
   }
@@ -257,7 +276,11 @@ function readSets(planId: string | null | undefined, exercises: Exercise[]) {
   const saved = localStorage.getItem(setsStorageKey(planId));
   if (!saved) return emptySets(exercises);
   try {
-    return JSON.parse(saved) as Record<string, SetRow[]>;
+    const parsed = JSON.parse(saved) as Record<string, SetRow[]>;
+    for (const rows of Object.values(parsed)) {
+      for (const row of rows) row.duration = row.duration ?? "";
+    }
+    return parsed;
   } catch (e) {
     console.error("Fout bij uitlezen sets cache:", e);
     return emptySets(exercises);
@@ -402,7 +425,7 @@ export default function ActiveWorkoutLogger({
   );
 
   const handleUpdate = useCallback(
-    (exerciseName: string, setIndex: number, field: "weight" | "reps", value: string) => {
+    (exerciseName: string, setIndex: number, field: "weight" | "reps" | "duration", value: string) => {
       setSetsData((prev) => {
         const rows = prev[exerciseName];
         if (!rows) return prev;
@@ -437,13 +460,22 @@ export default function ActiveWorkoutLogger({
     const completedSets = Object.entries(setsData).flatMap(([exerciseName, rows]) =>
       rows
         .filter((r) => r.isCompleted)
-        .map((r) => ({
-          exerciseId: exercises.find((exercise) => exercise.name === exerciseName)?.exerciseId,
-          exerciseName,
-          setNumber: r.setNumber,
-          weight: loggedNumber(r.weight, previousSets[exerciseName]?.[r.setNumber - 1]?.weight),
-          reps: loggedNumber(r.reps, previousSets[exerciseName]?.[r.setNumber - 1]?.reps, true),
-        }))
+        .map((r) => {
+          const exercise = exercises.find((item) => item.name === exerciseName);
+          const previous = previousSets[exerciseName]?.[r.setNumber - 1];
+          const mode = exercise?.tracking ?? "weight";
+          return {
+            exerciseId: exercise?.exerciseId,
+            exerciseName,
+            setNumber: r.setNumber,
+            weight: mode === "weight" ? loggedNumber(r.weight, previous?.weight) : 0,
+            reps: mode === "hold" ? 0 : loggedNumber(r.reps, previous?.reps, true),
+            durationSeconds:
+              mode === "hold"
+                ? loggedNumber(r.duration, previous?.durationSeconds ?? undefined, true)
+                : null,
+          };
+        })
     );
 
     if (completedSets.length === 0) {

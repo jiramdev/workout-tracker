@@ -2,8 +2,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { selectTab } from "@/components/TabLink";
 import { PrefetchKind } from "next/dist/client/components/router-reducer/router-reducer-types";
 import { LayoutGrid, Calendar, BarChart3, User } from "lucide-react";
 import { motion } from "motion/react";
@@ -82,6 +83,21 @@ const TABS = [
 export default function BottomBar() {
   const pathname = usePathname();
   const router = useRouter();
+  const routeIndex = TAB_HREFS.indexOf(pathname as (typeof TAB_HREFS)[number]);
+  const [tabIndex, setTabIndex] = useState(routeIndex);
+
+  useEffect(() => {
+    setTabIndex(TAB_HREFS.indexOf(pathname as (typeof TAB_HREFS)[number]));
+  }, [pathname]);
+
+  useEffect(() => {
+    const onTab = (event: Event) => {
+      const index = (event as CustomEvent<number>).detail;
+      if (typeof index === "number") setTabIndex(index);
+    };
+    window.addEventListener("repiq-tab", onTab);
+    return () => window.removeEventListener("repiq-tab", onTab);
+  }, []);
 
   useEffect(() => {
     if (pathname === "/login" || pathname === "/register" || pathname.startsWith("/onboarding") || pathname === "/workout/active") return;
@@ -134,7 +150,7 @@ export default function BottomBar() {
   }, [pathname]);
 
   useEffect(() => {
-    const index = TAB_HREFS.indexOf(pathname as (typeof TAB_HREFS)[number]);
+    const index = tabIndex;
     if (index === -1) return;
 
     let startX = 0;
@@ -179,6 +195,10 @@ export default function BottomBar() {
       const nextIndex = dx < 0 ? index + 1 : index - 1;
       if (nextIndex < 0 || nextIndex >= TAB_HREFS.length) return;
 
+      if (document.getElementById("tab-track")) {
+        selectTab(nextIndex);
+        return;
+      }
       const page = document.getElementById("page-root");
       const href = TAB_HREFS[nextIndex];
       const direction = dx < 0 ? 1 : -1;
@@ -213,7 +233,7 @@ export default function BottomBar() {
       document.removeEventListener("touchend", onEnd);
       document.removeEventListener("touchcancel", onCancel);
     };
-  }, [pathname, router]);
+  }, [tabIndex, router]);
 
   if (pathname === "/login" || pathname === "/register" || pathname.startsWith("/onboarding") || pathname === "/workout/active") {
     return null;
@@ -223,10 +243,10 @@ export default function BottomBar() {
     <div className="fixed bottom-6 left-0 right-0 z-50 flex justify-center px-4 pointer-events-none">
       <nav className="pointer-events-auto bg-[#141416]/90 backdrop-blur-2xl border border-white/[0.1] px-6 py-3 rounded-full shadow-[0_12px_36px_rgba(0,0,0,0.35)] flex items-center gap-8 transition-all">
         {TABS.map((tab) => {
-          const isActive = pathname === tab.href;
-          const Icon = tab.icon;
-          const from = TAB_HREFS.indexOf(pathname as (typeof TAB_HREFS)[number]);
           const to = TAB_HREFS.indexOf(tab.href);
+          const isActive = tabIndex === to;
+          const Icon = tab.icon;
+          const from = tabIndex;
           const slide =
             from !== -1 && to !== -1 && from !== to
               ? to > from
@@ -247,6 +267,11 @@ export default function BottomBar() {
                   event.altKey ||
                   event.button !== 0
                 ) {
+                  return;
+                }
+                if (document.getElementById("tab-track")) {
+                  event.preventDefault();
+                  selectTab(to);
                   return;
                 }
                 const page = document.getElementById("page-root");

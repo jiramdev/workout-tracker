@@ -25,14 +25,14 @@ export default async function EditPlanPage({ params }: PageProps) {
       include: {
         exercises: {
           orderBy: { order: "asc" },
-          include: { exercise: { select: { id: true, name: true } } },
+          include: { exercise: { select: { id: true, name: true, tracking: true } } },
         },
       },
     }),
     prisma.exercise.findMany({
       where: { userId: session.user.id },
       orderBy: { name: "asc" },
-      select: { id: true, name: true },
+      select: { id: true, name: true, tracking: true },
     }),
   ]);
 
@@ -44,6 +44,9 @@ export default async function EditPlanPage({ params }: PageProps) {
     id: exercise.id,
     exerciseId: exercise.exerciseId,
     name: exercise.exercise?.name ?? exercise.name,
+    tracking: exercise.exercise?.tracking === "reps" || exercise.exercise?.tracking === "hold"
+      ? exercise.exercise.tracking
+      : "weight",
     targetSets: exercise.targetSets,
     restSeconds: exercise.restSeconds,
   }));

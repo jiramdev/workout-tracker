@@ -1,7 +1,6 @@
 // app/layout.tsx
 import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
-import { headers } from "next/headers";
 import { Inter, Anton } from "next/font/google";
 import "./globals.css";
 import BottomBar from "@/components/BottomBar";
@@ -85,14 +84,11 @@ export const viewport: Viewport = {
   userScalable: false,
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const path = (await headers()).get("x-pathname") ?? "";
-  const showBoot = path.length > 0 && !path.startsWith("/onboarding");
-
   return (
     <html lang="nl" style={{ backgroundColor: "#baa3d0", colorScheme: "light" }}>
       <body
@@ -141,15 +137,13 @@ export default async function RootLayout({
             background: #141416;
           }
         `}</style>
-        {showBoot && (
-          <div id="boot-splash" aria-hidden="true">
+        <div id="boot-splash" aria-hidden="true">
             <p className="boot-name">repiq</p>
             <p className="boot-slogan">Every rep, counted.</p>
             <div className="boot-track">
               <div id="boot-bar" />
             </div>
-          </div>
-        )}
+        </div>
         <div id="page-root">
           <Suspense fallback={null}>{children}</Suspense>
         </div>

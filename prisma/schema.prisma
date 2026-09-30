@@ -43,6 +43,7 @@ model Exercise {
   user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   name        String
   nameKey     String
+  tracking    String         @default("weight")
   createdAt   DateTime       @default(now())
   placements  PlanExercise[]
   entries     LogEntry[]
@@ -102,8 +103,9 @@ model LogEntry {
   exercise     Exercise?  @relation(fields: [exerciseId], references: [id], onDelete: SetNull)
   exerciseName String
   setNumber    Int
-  reps         Int
-  weight       Float
+  reps             Int
+  weight           Float
+  durationSeconds  Int?
 
   @@index([exerciseId])
 }

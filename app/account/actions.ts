@@ -3,8 +3,8 @@
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { revalidatePath } from "next/cache";
 import { refreshUserCache } from "@/lib/queries";
+import { revalidateTabs } from "@/lib/revalidate-tabs";
 import bcrypt from "bcryptjs";
 
 export interface AccountInput {
@@ -83,9 +83,7 @@ export async function updateAccount(input: AccountInput) {
   }
 
   refreshUserCache(session.user.id);
-  revalidatePath("/");
-  revalidatePath("/account");
-  revalidatePath("/analytics");
+  revalidateTabs();
   return { success: true };
 }
 

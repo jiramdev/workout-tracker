@@ -7,6 +7,7 @@ import { authOptions } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { refreshUserCache } from "@/lib/queries";
 import { exerciseKey, findOrCreateExercise } from "@/lib/exercises";
+import { isTracking } from "@/lib/exercise-library";
 import { redirect } from "next/navigation";
 
 // 1. Naam van het plan bijwerken
@@ -31,7 +32,8 @@ export async function addExerciseToPlan(
   exerciseName: string,
   targetSets: number = 3,
   restSeconds: number = 90,
-  exerciseId?: string | null
+  exerciseId?: string | null,
+  tracking?: string | null
 ) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) throw new Error("Niet ingelogd");
@@ -54,7 +56,7 @@ export async function addExerciseToPlan(
 
   const exercise = exerciseId
     ? await prisma.exercise.findFirst({ where: { id: exerciseId, userId } })
-    : await findOrCreateExercise(userId, exerciseName);
+    : await findOrCreateExercise(userId, exerciseName, tracking);
   if (!exercise) return { error: "Vul een naam in." };
 
   const duplicate = await prisma.planExercise.findFirst({
@@ -98,7 +100,8 @@ export async function updateExercise(
   exerciseId: string,
   exerciseName: string,
   targetSets: number,
-  restSeconds: number
+  restSeconds: number,
+  tracking?: string | null
 ) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) throw new Error("Niet ingelogd");
@@ -138,7 +141,11 @@ export async function updateExercise(
   await prisma.$transaction([
     prisma.exercise.update({
       where: { id: shared.id },
-      data: { name, nameKey: key },
+      data: {
+        name,
+        nameKey: key,
+        ...(isTracking(tracking) ? { tracking } : {}),
+      },
     }),
     prisma.planExercise.updateMany({
       where: { exerciseId: shared.id },

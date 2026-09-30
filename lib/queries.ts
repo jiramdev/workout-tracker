@@ -124,7 +124,7 @@ export function getActiveWorkout(userId: string, planId?: string) {
                 exerciseId: true,
                 targetSets: true,
                 restSeconds: true,
-                exercise: { select: { name: true } },
+                exercise: { select: { name: true, tracking: true } },
               },
               orderBy: { order: "asc" },
             },
@@ -136,6 +136,10 @@ export function getActiveWorkout(userId: string, planId?: string) {
       id: exercise.id,
       exerciseId: exercise.exerciseId,
       name: exercise.exercise?.name ?? exercise.name,
+      tracking:
+        exercise.exercise?.tracking === "reps" || exercise.exercise?.tracking === "hold"
+          ? exercise.exercise.tracking
+          : "weight",
       targetSets: exercise.targetSets,
       restSeconds: exercise.restSeconds,
     }));
@@ -158,23 +162,28 @@ export function getActiveWorkout(userId: string, planId?: string) {
               setNumber: true,
               weight: true,
               reps: true,
+              durationSeconds: true,
               workoutLogId: true,
             },
           });
 
     const latestLog = new Map<string, string>();
-    const setsByExercise = new Map<string, { weight: number; reps: number }[]>();
+    const setsByExercise = new Map<string, { weight: number; reps: number; durationSeconds: number | null }[]>();
     for (const entry of history) {
       if (!entry.exerciseId) continue;
       const chosen = latestLog.get(entry.exerciseId);
       if (!chosen) latestLog.set(entry.exerciseId, entry.workoutLogId);
       else if (chosen !== entry.workoutLogId) continue;
       const sets = setsByExercise.get(entry.exerciseId) ?? [];
-      sets[entry.setNumber - 1] = { weight: entry.weight, reps: entry.reps };
+      sets[entry.setNumber - 1] = {
+        weight: entry.weight,
+        reps: entry.reps,
+        durationSeconds: entry.durationSeconds,
+      };
       setsByExercise.set(entry.exerciseId, sets);
     }
 
-    const previousSets: Record<string, { weight: number; reps: number }[]> = {};
+    const previousSets: Record<string, { weight: number; reps: number; durationSeconds: number | null }[]> = {};
     for (const exercise of exercises) {
       const sets = exercise.exerciseId ? setsByExercise.get(exercise.exerciseId) : undefined;
       if (sets?.length) previousSets[exercise.name] = sets;

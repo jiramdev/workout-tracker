@@ -11,11 +11,18 @@ import {
   removeExerciseFromPlan,
   deletePlan,
 } from "./actions";
+import {
+  EXERCISE_LIBRARY,
+  TRACKING_OPTIONS,
+  libraryMatch,
+  type ExerciseTracking,
+} from "@/lib/exercise-library";
 
 interface ExerciseItem {
   id: string;
   exerciseId?: string | null;
   name: string;
+  tracking?: ExerciseTracking;
   targetSets?: number;
   restSeconds?: number;
 }
@@ -23,6 +30,7 @@ interface ExerciseItem {
 interface LibraryExercise {
   id: string;
   name: string;
+  tracking?: string;
 }
 
 interface DragState {
@@ -61,6 +69,7 @@ export default function PlanEditor({
   const [drag, setDrag] = useState<DragState | null>(null);
   const [isAddingExercise, setIsAddingExercise] = useState(false);
   const [exerciseName, setExerciseName] = useState("");
+  const [tracking, setTracking] = useState<ExerciseTracking>("weight");
   const [targetSets, setTargetSets] = useState("3");
   const [restSeconds, setRestSeconds] = useState("90");
   const [addError, setAddError] = useState<string | null>(null);
@@ -68,6 +77,7 @@ export default function PlanEditor({
   const [openId, setOpenId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
+  const [editTracking, setEditTracking] = useState<ExerciseTracking>("weight");
   const [editSets, setEditSets] = useState("");
   const [editRest, setEditRest] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
@@ -110,12 +120,13 @@ export default function PlanEditor({
     const key = exerciseName.trim().toLocaleLowerCase("nl");
     const match = library.find((exercise) => exercise.name.trim().toLocaleLowerCase("nl") === key);
     setAddError(null);
-    const result = await addExerciseToPlan(planId, exerciseName, sets, rest, match?.id);
+    const result = await addExerciseToPlan(planId, exerciseName, sets, rest, match?.id, tracking);
     if (result?.error) {
       setAddError(result.error);
       return;
     }
     setExerciseName("");
+    setTracking("weight");
     setTargetSets("3");
     setRestSeconds("90");
     setIsAddingExercise(false);
@@ -124,6 +135,7 @@ export default function PlanEditor({
   function startEdit(exercise: ExerciseItem) {
     setEditingId(exercise.id);
     setEditName(exercise.name);
+    setEditTracking(exercise.tracking ?? "weight");
     setEditSets(String(exercise.targetSets ?? 3));
     setEditRest(String(exercise.restSeconds ?? 90));
     setEditError(null);
@@ -147,7 +159,7 @@ export default function PlanEditor({
       return;
     }
 
-    const result = await updateExercise(planId, editingId, editName, sets, rest);
+    const result = await updateExercise(planId, editingId, editName, sets, rest, editTracking);
     if (result?.error) {
       setEditError(result.error);
       return;
@@ -155,7 +167,7 @@ export default function PlanEditor({
     setItems((current) =>
       current.map((exercise) =>
         exercise.id === editingId
-          ? { ...exercise, name: editName.trim(), targetSets: sets, restSeconds: rest }
+          ? { ...exercise, name: editName.trim(), tracking: editTracking, targetSets: sets, restSeconds: rest }
           : exercise
       )
     );
@@ -262,12 +274,40 @@ export default function PlanEditor({
   const usedExerciseIds = new Set(
     items.map((item) => item.exerciseId).filter((id): id is string => Boolean(id))
   );
+  const usedNames = new Set(items.map((item) => item.name.trim().toLocaleLowerCase("nl")));
+  const ownedNames = new Set(library.map((item) => item.name.trim().toLocaleLowerCase("nl")));
   const exerciseQuery = exerciseName.trim().toLocaleLowerCase("nl");
-  const suggestions = library.filter((exercise) => {
-    if (usedExerciseIds.has(exercise.id)) return false;
-    if (!exerciseQuery) return true;
-    return exercise.name.toLocaleLowerCase("nl").includes(exerciseQuery);
-  });
+  const suggestions = [
+    ...library
+      .filter((exercise) => {
+        if (usedExerciseIds.has(exercise.id)) return false;
+        if (!exerciseQuery) return true;
+        return exercise.name.toLocaleLowerCase("nl").includes(exerciseQuery);
+      })
+      .map((exercise) => ({
+        key: exercise.id,
+        id: exercise.id,
+        name: exercise.name,
+        tracking: (exercise.tracking === "reps" || exercise.tracking === "hold"
+          ? exercise.tracking
+          : "weight") as ExerciseTracking,
+      })),
+    ...EXERCISE_LIBRARY.filter((exercise) => {
+      const key = exercise.name.toLocaleLowerCase("nl");
+      if (ownedNames.has(key) || usedNames.has(key)) return false;
+      if (!exerciseQuery) return true;
+      return key.includes(exerciseQuery);
+    }).map((exercise) => ({
+      key: `library:${exercise.name}`,
+      id: null as string | null,
+      name: exercise.name,
+      tracking: exercise.tracking,
+    })),
+  ].slice(0, 12);
+  const exactOwn = library.find(
+    (exercise) => exercise.name.trim().toLocaleLowerCase("nl") === exerciseQuery
+  );
+  const showTracking = !exactOwn;
 
   return (
     <div className="space-y-3.5">
@@ -330,7 +370,19 @@ export default function PlanEditor({
               type="text"
               placeholder="Zoek of maak een oefening"
               value={exerciseName}
-              onChange={(e) => setExerciseName(e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                setExerciseName(value);
+                const own = library.find(
+                  (exercise) => exercise.name.trim().toLocaleLowerCase("nl") === value.trim().toLocaleLowerCase("nl")
+                );
+                const fromLibrary = libraryMatch(value);
+                if (own?.tracking === "reps" || own?.tracking === "hold" || own?.tracking === "weight") {
+                  setTracking(own.tracking);
+                } else if (fromLibrary) {
+                  setTracking(fromLibrary.tracking);
+                }
+              }}
               autoFocus
               className={fieldClass}
             />
@@ -338,23 +390,46 @@ export default function PlanEditor({
               <div className="max-h-40 space-y-2 overflow-y-auto">
                 {suggestions.map((exercise) => {
                   const selected =
-                    exercise.name.trim().toLocaleLowerCase("nl") ===
-                    exerciseName.trim().toLocaleLowerCase("nl");
+                    exercise.name.trim().toLocaleLowerCase("nl") === exerciseQuery;
                   return (
                     <button
-                      key={exercise.id}
+                      key={exercise.key}
                       type="button"
-                      onClick={() => setExerciseName(exercise.name)}
-                      className={`w-full bg-[#1b1b1e] rounded-2xl px-4 py-3 flex items-center border text-left apple-press ${
+                      onClick={() => {
+                        setExerciseName(exercise.name);
+                        setTracking(exercise.tracking);
+                      }}
+                      className={`w-full bg-[#1b1b1e] rounded-2xl px-4 py-3 flex items-center justify-between gap-3 border text-left apple-press ${
                         selected ? "border-[#baa3d0]" : "border-white/[0.04]"
                       }`}
                     >
                       <span className="text-[14px] font-medium text-white truncate">
                         {exercise.name}
                       </span>
+                      <span className="text-[11px] text-[#71717a] shrink-0">
+                        {TRACKING_OPTIONS.find((option) => option.id === exercise.tracking)?.label}
+                      </span>
                     </button>
                   );
                 })}
+              </div>
+            )}
+            {showTracking && (
+              <div className="grid grid-cols-3 gap-2">
+                {TRACKING_OPTIONS.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setTracking(option.id)}
+                    className={`py-2.5 rounded-2xl text-[11px] uppercase tracking-wider font-semibold ${
+                      tracking === option.id
+                        ? "bg-[#baa3d0] text-[#141416]"
+                        : "bg-[#1b1b1e] border border-white/[0.04] text-[#a1a1aa]"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
               </div>
             )}
             <div className="grid grid-cols-2 gap-2">
@@ -429,6 +504,22 @@ export default function PlanEditor({
                       autoFocus
                       className="w-full bg-[#141416] border border-white/[0.08] rounded-2xl px-4 py-3 text-[14px] text-white outline-none focus:border-[#baa3d0]"
                     />
+                    <div className="grid grid-cols-3 gap-2">
+                      {TRACKING_OPTIONS.map((option) => (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => setEditTracking(option.id)}
+                          className={`py-2.5 rounded-2xl text-[11px] uppercase tracking-wider font-semibold ${
+                            editTracking === option.id
+                              ? "bg-[#baa3d0] text-[#141416]"
+                              : "bg-[#141416] border border-white/[0.08] text-[#a1a1aa]"
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
                     <div className="grid grid-cols-2 gap-2">
                       <input
                         type="text"
