@@ -113,50 +113,74 @@ export function getSchedule(userId: string) {
 
 export function getActiveWorkout(userId: string, planId?: string) {
   return cached(userId, `active-sets:${planId ?? "none"}`, async () => {
-    const [plan, latestWorkout] = await Promise.all([
-      planId
-        ? prisma.workoutPlan.findFirst({
-            where: { id: planId, userId },
-            select: {
-              exercises: {
-                select: {
-                  id: true,
-                  name: true,
-                  targetSets: true,
-                  restSeconds: true,
-                },
-                orderBy: { order: "asc" },
+    const plan = planId
+      ? await prisma.workoutPlan.findFirst({
+          where: { id: planId, userId },
+          select: {
+            exercises: {
+              select: {
+                id: true,
+                name: true,
+                exerciseId: true,
+                targetSets: true,
+                restSeconds: true,
+                exercise: { select: { name: true } },
               },
+              orderBy: { order: "asc" },
             },
-          })
-        : Promise.resolve(null),
-      prisma.workoutLog.findFirst({
-        where: {
-          userId,
-          completedAt: { not: null },
-          ...(planId ? { planId } : {}),
-        },
-        orderBy: { completedAt: "desc" },
-        select: {
-          entries: {
-            orderBy: { setNumber: "asc" },
-            select: { exerciseName: true, setNumber: true, weight: true, reps: true },
           },
-        },
-      }),
-    ]);
+        })
+      : null;
 
-    const previousSets: Record<string, { weight: number; reps: number }[]> = {};
-    for (const entry of latestWorkout?.entries ?? []) {
-      const sets = previousSets[entry.exerciseName] ?? [];
+    const exercises = (plan?.exercises ?? []).map((exercise) => ({
+      id: exercise.id,
+      exerciseId: exercise.exerciseId,
+      name: exercise.exercise?.name ?? exercise.name,
+      targetSets: exercise.targetSets,
+      restSeconds: exercise.restSeconds,
+    }));
+
+    const exerciseIds = exercises
+      .map((exercise) => exercise.exerciseId)
+      .filter((id): id is string => Boolean(id));
+
+    const history =
+      exerciseIds.length === 0
+        ? []
+        : await prisma.logEntry.findMany({
+            where: {
+              exerciseId: { in: exerciseIds },
+              workoutLog: { userId, completedAt: { not: null } },
+            },
+            orderBy: [{ workoutLog: { completedAt: "desc" } }, { setNumber: "asc" }],
+            select: {
+              exerciseId: true,
+              setNumber: true,
+              weight: true,
+              reps: true,
+              workoutLogId: true,
+            },
+          });
+
+    const latestLog = new Map<string, string>();
+    const setsByExercise = new Map<string, { weight: number; reps: number }[]>();
+    for (const entry of history) {
+      if (!entry.exerciseId) continue;
+      const chosen = latestLog.get(entry.exerciseId);
+      if (!chosen) latestLog.set(entry.exerciseId, entry.workoutLogId);
+      else if (chosen !== entry.workoutLogId) continue;
+      const sets = setsByExercise.get(entry.exerciseId) ?? [];
       sets[entry.setNumber - 1] = { weight: entry.weight, reps: entry.reps };
-      previousSets[entry.exerciseName] = sets;
+      setsByExercise.set(entry.exerciseId, sets);
     }
 
-    return {
-      exercises: plan?.exercises ?? [],
-      previousSets,
-    };
+    const previousSets: Record<string, { weight: number; reps: number }[]> = {};
+    for (const exercise of exercises) {
+      const sets = exercise.exerciseId ? setsByExercise.get(exercise.exerciseId) : undefined;
+      if (sets?.length) previousSets[exercise.name] = sets;
+    }
+
+    return { exercises, previousSets };
   });
 }
 
@@ -168,7 +192,12 @@ export function getAnalytics(userId: string) {
         select: {
           completedAt: true,
           entries: {
-            select: { exerciseName: true, weight: true, reps: true },
+            select: {
+              exerciseName: true,
+              weight: true,
+              reps: true,
+              exercise: { select: { name: true } },
+            },
           },
         },
         orderBy: { completedAt: "asc" },
@@ -183,7 +212,11 @@ export function getAnalytics(userId: string) {
     return {
       workouts: workouts.map((workout) => ({
         completedAt: workout.completedAt!.toISOString(),
-        entries: workout.entries,
+        entries: workout.entries.map((entry) => ({
+          exerciseName: entry.exercise?.name || entry.exerciseName,
+          weight: entry.weight,
+          reps: entry.reps,
+        })),
       })),
       weightLogs: weightLogs.map((log) => ({
         weight: log.weight,

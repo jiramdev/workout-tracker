@@ -6,8 +6,10 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { refreshUserCache } from "@/lib/queries";
+import { exerciseKey } from "@/lib/exercises";
 
 interface CompletedSet {
+  exerciseId?: string | null;
   exerciseName: string;
   setNumber: number;
   weight: number;
@@ -27,26 +29,38 @@ export async function finishWorkout({
   if (!session?.user?.id) throw new Error("Niet ingelogd");
 
   const completedAt = new Date();
+  const userId = session.user.id;
+  const keys = [...new Set(sets.map((set) => exerciseKey(set.exerciseName)).filter(Boolean))];
+  const known = keys.length
+    ? await prisma.exercise.findMany({
+        where: { userId, nameKey: { in: keys } },
+        select: { id: true, nameKey: true, name: true },
+      })
+    : [];
+  const byKey = new Map(known.map((exercise) => [exercise.nameKey, exercise]));
 
-  // Maak de WorkoutLog aan inclusief alle LogEntry records
   const workoutLog = await prisma.workoutLog.create({
     data: {
-      userId: session.user.id,
+      userId,
       planId: planId || null,
       startedAt: new Date(startedAt),
       completedAt,
       entries: {
-        create: sets.map((s) => ({
-          exerciseName: s.exerciseName,
-          setNumber: s.setNumber,
-          weight: Number(s.weight) || 0,
-          reps: Number(s.reps) || 0,
-        })),
+        create: sets.map((set) => {
+          const match = byKey.get(exerciseKey(set.exerciseName));
+          return {
+            exerciseId: match?.id ?? null,
+            exerciseName: match?.name || set.exerciseName,
+            setNumber: set.setNumber,
+            weight: Number(set.weight) || 0,
+            reps: Number(set.reps) || 0,
+          };
+        }),
       },
     },
   });
 
-  refreshUserCache(session.user.id);
+  refreshUserCache(userId);
   revalidatePath("/");
   revalidatePath("/analytics");
   return { success: true, workoutLogId: workoutLog.id };

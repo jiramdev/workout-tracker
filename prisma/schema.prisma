@@ -19,6 +19,7 @@ model User {
   createdAt     DateTime        @default(now())
 
   workoutPlans WorkoutPlan[]
+  exercises    Exercise[]
   schedule     WeeklySchedule?
   workoutLogs  WorkoutLog[]
   weightLogs    BodyWeightLog[]
@@ -36,14 +37,32 @@ model WorkoutPlan {
   logs      WorkoutLog[]
 }
 
+model Exercise {
+  id          String         @id @default(cuid())
+  userId      String
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  nameKey     String
+  createdAt   DateTime       @default(now())
+  placements  PlanExercise[]
+  entries     LogEntry[]
+
+  @@unique([userId, nameKey])
+  @@index([userId])
+}
+
 model PlanExercise {
   id          String      @id @default(cuid())
   planId      String
   plan        WorkoutPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  exerciseId  String?
+  exercise    Exercise?   @relation(fields: [exerciseId], references: [id], onDelete: SetNull)
   name        String
   targetSets  Int
   restSeconds Int
   order       Int         @default(0)
+
+  @@index([exerciseId])
 }
 
 model WeeklySchedule {
@@ -79,10 +98,14 @@ model LogEntry {
   id           String     @id @default(cuid())
   workoutLogId String
   workoutLog   WorkoutLog @relation(fields: [workoutLogId], references: [id], onDelete: Cascade)
+  exerciseId   String?
+  exercise     Exercise?  @relation(fields: [exerciseId], references: [id], onDelete: SetNull)
   exerciseName String
   setNumber    Int
   reps         Int
   weight       Float
+
+  @@index([exerciseId])
 }
 
 model AppNotification {

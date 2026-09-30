@@ -107,10 +107,8 @@ export default function ScheduleManager({ plans, initialDays }: ScheduleManagerP
                 <span className="text-[14px] font-medium text-white shrink-0">{name}</span>
                 <div className="flex items-center gap-1.5 min-w-0">
                   <span
-                    className={`font-editorial tracking-wider leading-none truncate ${
-                      currentPlan
-                        ? "text-[22px] text-[#baa3d0]"
-                        : "text-[18px] text-[#71717a]"
+                    className={`min-w-0 font-editorial text-[18px] tracking-wider leading-none truncate ${
+                      currentPlan ? "text-[#baa3d0]" : "text-[#71717a]"
                     }`}
                   >
                     {currentPlan ? currentPlan.name : "Rustdag"}

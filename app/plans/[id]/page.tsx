@@ -16,28 +16,36 @@ export default async function EditPlanPage({ params }: PageProps) {
 
   const { id } = await params;
 
-  // Haal het plan op van de ingelogde gebruiker
-  const plan = await (prisma as any).workoutPlan.findFirst({
-    where: {
-      id,
-      userId: session.user.id,
-    },
-    include: {
-      exercises: {
-        orderBy: { order: "asc" },
+  const [plan, library] = await Promise.all([
+    prisma.workoutPlan.findFirst({
+      where: {
+        id,
+        userId: session.user.id,
       },
-    },
-  });
+      include: {
+        exercises: {
+          orderBy: { order: "asc" },
+          include: { exercise: { select: { id: true, name: true } } },
+        },
+      },
+    }),
+    prisma.exercise.findMany({
+      where: { userId: session.user.id },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+  ]);
 
   if (!plan) {
     notFound();
   }
 
-  const formattedExercises = (plan.exercises || []).map((e: any) => ({
-    id: e.id,
-    name: e.name,
-    targetSets: e.targetSets,
-    restSeconds: e.restSeconds,
+  const formattedExercises = plan.exercises.map((exercise) => ({
+    id: exercise.id,
+    exerciseId: exercise.exerciseId,
+    name: exercise.exercise?.name ?? exercise.name,
+    targetSets: exercise.targetSets,
+    restSeconds: exercise.restSeconds,
   }));
 
   return (
@@ -50,6 +58,7 @@ export default async function EditPlanPage({ params }: PageProps) {
           planId={plan.id}
           initialName={plan.name}
           exercises={formattedExercises}
+          library={library}
         />
       </main>
     </div>

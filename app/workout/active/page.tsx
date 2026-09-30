@@ -20,9 +20,9 @@ export default async function ActiveWorkoutPage({ searchParams }: PageProps) {
     workout.exercises.length > 0
       ? workout.exercises
       : [
-          { id: "1", name: "Bench Press", targetSets: 3, restSeconds: 90 },
-          { id: "2", name: "Incline Dumbbell Press", targetSets: 3, restSeconds: 90 },
-          { id: "3", name: "Tricep Pushdown", targetSets: 3, restSeconds: 60 },
+          { id: "1", exerciseId: null, name: "Bench Press", targetSets: 3, restSeconds: 90 },
+          { id: "2", exerciseId: null, name: "Incline Dumbbell Press", targetSets: 3, restSeconds: 90 },
+          { id: "3", exerciseId: null, name: "Tricep Pushdown", targetSets: 3, restSeconds: 60 },
         ];
 
   return (

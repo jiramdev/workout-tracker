@@ -6,6 +6,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { refreshUserCache } from "@/lib/queries";
+import { exerciseKey, findOrCreateExercise } from "@/lib/exercises";
 import { redirect } from "next/navigation";
 
 // 1. Naam van het plan bijwerken
@@ -29,34 +30,67 @@ export async function addExerciseToPlan(
   planId: string,
   exerciseName: string,
   targetSets: number = 3,
-  restSeconds: number = 90
+  restSeconds: number = 90,
+  exerciseId?: string | null
 ) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) throw new Error("Niet ingelogd");
-  if (!exerciseName.trim()) return;
 
-  const existingExercises = await (prisma as any).planExercise.findMany({
+  const userId = session.user.id;
+  const plan = await prisma.workoutPlan.findFirst({
+    where: { id: planId, userId },
+    select: { id: true },
+  });
+  if (!plan) return { error: "Plan niet gevonden." };
+
+  const sets = Number(targetSets);
+  const rest = Number(restSeconds);
+  if (!Number.isInteger(sets) || sets < 1 || sets > 20) {
+    return { error: "Aantal sets moet tussen 1 en 20 liggen." };
+  }
+  if (!Number.isInteger(rest) || rest < 0 || rest > 600) {
+    return { error: "Rusttijd moet tussen 0 en 600 seconden liggen." };
+  }
+
+  const exercise = exerciseId
+    ? await prisma.exercise.findFirst({ where: { id: exerciseId, userId } })
+    : await findOrCreateExercise(userId, exerciseName);
+  if (!exercise) return { error: "Vul een naam in." };
+
+  const duplicate = await prisma.planExercise.findFirst({
+    where: {
+      planId,
+      OR: [
+        { exerciseId: exercise.id },
+        { name: { equals: exercise.name, mode: "insensitive" } },
+      ],
+    },
+    select: { id: true },
+  });
+  if (duplicate) return { error: "Deze oefening staat al in het plan." };
+
+  const last = await prisma.planExercise.findFirst({
     where: { planId },
     orderBy: { order: "desc" },
-    take: 1,
+    select: { order: true },
   });
 
-  const nextOrder = existingExercises.length > 0 ? (existingExercises[0].order ?? 0) + 1 : 0;
-
-  await (prisma as any).planExercise.create({
+  await prisma.planExercise.create({
     data: {
       planId,
-      name: exerciseName.trim(),
-      targetSets: Number.isInteger(Number(targetSets)) && Number(targetSets) >= 1 ? Number(targetSets) : 3,
-      restSeconds: Number.isInteger(Number(restSeconds)) && Number(restSeconds) >= 0 ? Number(restSeconds) : 90,
-      order: nextOrder,
+      exerciseId: exercise.id,
+      name: exercise.name,
+      targetSets: sets,
+      restSeconds: rest,
+      order: (last?.order ?? -1) + 1,
     },
   });
 
-  refreshUserCache(session.user.id);
+  refreshUserCache(userId);
   revalidatePath(`/plans/${planId}`);
   revalidatePath("/schedule");
   revalidatePath("/");
+  return { success: true };
 }
 
 export async function updateExercise(
@@ -80,16 +114,45 @@ export async function updateExercise(
     return { error: "Rusttijd moet tussen 0 en 600 seconden liggen." };
   }
 
-  const exercise = await prisma.planExercise.findFirst({
+  const placement = await prisma.planExercise.findFirst({
     where: { id: exerciseId, planId, plan: { userId: session.user.id } },
+    select: { id: true, exerciseId: true, name: true },
+  });
+  if (!placement) return { error: "Oefening niet gevonden." };
+
+  const shared =
+    (placement.exerciseId
+      ? await prisma.exercise.findFirst({
+          where: { id: placement.exerciseId, userId: session.user.id },
+        })
+      : null) ?? (await findOrCreateExercise(session.user.id, placement.name));
+  if (!shared) return { error: "Vul een naam in." };
+
+  const key = exerciseKey(name);
+  const clash = await prisma.exercise.findFirst({
+    where: { userId: session.user.id, nameKey: key, NOT: { id: shared.id } },
     select: { id: true },
   });
-  if (!exercise) return { error: "Oefening niet gevonden." };
+  if (clash) return { error: "Die oefening bestaat al." };
 
-  await prisma.planExercise.update({
-    where: { id: exerciseId },
-    data: { name, targetSets: sets, restSeconds: rest },
-  });
+  await prisma.$transaction([
+    prisma.exercise.update({
+      where: { id: shared.id },
+      data: { name, nameKey: key },
+    }),
+    prisma.planExercise.updateMany({
+      where: { exerciseId: shared.id },
+      data: { name },
+    }),
+    prisma.logEntry.updateMany({
+      where: { exerciseId: shared.id },
+      data: { exerciseName: name },
+    }),
+    prisma.planExercise.update({
+      where: { id: placement.id },
+      data: { exerciseId: shared.id, name, targetSets: sets, restSeconds: rest },
+    }),
+  ]);
 
   refreshUserCache(session.user.id);
   revalidatePath(`/plans/${planId}`);

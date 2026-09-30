@@ -10,6 +10,7 @@ import { finishWorkout } from "./actions";
 
 interface Exercise {
   id: string;
+  exerciseId?: string | null;
   name: string;
   targetSets: number;
   restSeconds?: number;
@@ -437,6 +438,7 @@ export default function ActiveWorkoutLogger({
       rows
         .filter((r) => r.isCompleted)
         .map((r) => ({
+          exerciseId: exercises.find((exercise) => exercise.name === exerciseName)?.exerciseId,
           exerciseName,
           setNumber: r.setNumber,
           weight: loggedNumber(r.weight, previousSets[exerciseName]?.[r.setNumber - 1]?.weight),

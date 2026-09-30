@@ -14,9 +14,15 @@ import {
 
 interface ExerciseItem {
   id: string;
+  exerciseId?: string | null;
   name: string;
   targetSets?: number;
   restSeconds?: number;
+}
+
+interface LibraryExercise {
+  id: string;
+  name: string;
 }
 
 interface DragState {
@@ -34,12 +40,14 @@ interface PlanEditorProps {
   planId: string;
   initialName: string;
   exercises: ExerciseItem[];
+  library: LibraryExercise[];
 }
 
 export default function PlanEditor({
   planId,
   initialName,
   exercises,
+  library,
 }: PlanEditorProps) {
   const [name, setName] = useState(initialName);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -99,8 +107,14 @@ export default function PlanEditor({
       setAddError("Rusttijd moet tussen 0 en 600 seconden liggen.");
       return;
     }
+    const key = exerciseName.trim().toLocaleLowerCase("nl");
+    const match = library.find((exercise) => exercise.name.trim().toLocaleLowerCase("nl") === key);
     setAddError(null);
-    await addExerciseToPlan(planId, exerciseName, sets, rest);
+    const result = await addExerciseToPlan(planId, exerciseName, sets, rest, match?.id);
+    if (result?.error) {
+      setAddError(result.error);
+      return;
+    }
     setExerciseName("");
     setTargetSets("3");
     setRestSeconds("90");
@@ -245,6 +259,15 @@ export default function PlanEditor({
 
   const fieldClass =
     "w-full bg-[#1b1b1e] border border-white/[0.04] rounded-2xl px-4 py-3 text-[14px] text-white placeholder-[#71717a] outline-none focus:border-[#baa3d0]";
+  const usedExerciseIds = new Set(
+    items.map((item) => item.exerciseId).filter((id): id is string => Boolean(id))
+  );
+  const exerciseQuery = exerciseName.trim().toLocaleLowerCase("nl");
+  const suggestions = library.filter((exercise) => {
+    if (usedExerciseIds.has(exercise.id)) return false;
+    if (!exerciseQuery) return true;
+    return exercise.name.toLocaleLowerCase("nl").includes(exerciseQuery);
+  });
 
   return (
     <div className="space-y-3.5">
@@ -305,12 +328,35 @@ export default function PlanEditor({
           <form onSubmit={handleAddExercise} className="space-y-2">
             <input
               type="text"
-              placeholder="Naam"
+              placeholder="Zoek of maak een oefening"
               value={exerciseName}
               onChange={(e) => setExerciseName(e.target.value)}
               autoFocus
               className={fieldClass}
             />
+            {suggestions.length > 0 && (
+              <div className="max-h-40 space-y-2 overflow-y-auto">
+                {suggestions.map((exercise) => {
+                  const selected =
+                    exercise.name.trim().toLocaleLowerCase("nl") ===
+                    exerciseName.trim().toLocaleLowerCase("nl");
+                  return (
+                    <button
+                      key={exercise.id}
+                      type="button"
+                      onClick={() => setExerciseName(exercise.name)}
+                      className={`w-full bg-[#1b1b1e] rounded-2xl px-4 py-3 flex items-center border text-left apple-press ${
+                        selected ? "border-[#baa3d0]" : "border-white/[0.04]"
+                      }`}
+                    >
+                      <span className="text-[14px] font-medium text-white truncate">
+                        {exercise.name}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-2">
               <input
                 type="text"
