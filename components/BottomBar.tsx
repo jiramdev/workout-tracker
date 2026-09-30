@@ -2,10 +2,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { selectTab } from "@/components/TabLink";
-import { PrefetchKind } from "next/dist/client/components/router-reducer/router-reducer-types";
 import { LayoutGrid, Calendar, BarChart3, User } from "lucide-react";
 import { motion } from "motion/react";
 import { TAB_HREFS } from "@/lib/motion";
@@ -83,26 +82,12 @@ const TABS = [
 export default function BottomBar() {
   const pathname = usePathname();
   const router = useRouter();
-  const routeIndex = TAB_HREFS.indexOf(pathname as (typeof TAB_HREFS)[number]);
-  const [tabIndex, setTabIndex] = useState(routeIndex);
-
-  useEffect(() => {
-    setTabIndex(TAB_HREFS.indexOf(pathname as (typeof TAB_HREFS)[number]));
-  }, [pathname]);
-
-  useEffect(() => {
-    const onTab = (event: Event) => {
-      const index = (event as CustomEvent<number>).detail;
-      if (typeof index === "number") setTabIndex(index);
-    };
-    window.addEventListener("repiq-tab", onTab);
-    return () => window.removeEventListener("repiq-tab", onTab);
-  }, []);
+  const tabIndex = TAB_HREFS.indexOf(pathname as (typeof TAB_HREFS)[number]);
 
   useEffect(() => {
     if (pathname === "/login" || pathname === "/register" || pathname.startsWith("/onboarding") || pathname === "/workout/active") return;
     for (const tab of TABS) {
-      router.prefetch(tab.href, { kind: PrefetchKind.FULL });
+      router.prefetch(tab.href);
     }
   }, [pathname, router]);
 
@@ -129,23 +114,14 @@ export default function BottomBar() {
       event.preventDefault();
     };
 
-    const here = window.location.pathname + window.location.search;
-    history.pushState({ repiqStay: true }, "", here);
-    const onPop = () => {
-      const now = window.location.pathname + window.location.search;
-      if (now !== here) history.pushState({ repiqStay: true }, "", here);
-    };
-
     document.addEventListener("touchstart", onEdge, { passive: false, capture: true });
     document.addEventListener("touchstart", onStart, { passive: true });
     document.addEventListener("touchmove", onMove, { passive: false, capture: true });
-    window.addEventListener("popstate", onPop, true);
 
     return () => {
       document.removeEventListener("touchstart", onEdge, true);
       document.removeEventListener("touchstart", onStart);
       document.removeEventListener("touchmove", onMove, true);
-      window.removeEventListener("popstate", onPop, true);
     };
   }, [pathname]);
 
@@ -285,6 +261,8 @@ export default function BottomBar() {
                   router.replace(tab.href);
                 }
               }}
+              aria-label={tab.label}
+              aria-current={isActive ? "page" : undefined}
               className={`p-2 rounded-full transition apple-press flex items-center justify-center relative ${
                 isActive ? "text-white" : "text-[#71717a] hover:text-[#a1a1aa]"
               }`}

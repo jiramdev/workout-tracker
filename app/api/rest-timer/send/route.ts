@@ -63,11 +63,10 @@ export async function POST(req: Request) {
   }
 
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { restMessageId: true },
+    const timer = await prisma.restTimer.findUnique({
+      where: { userId_token: { userId, token } },
     });
-    if (!user || user.restMessageId !== token) {
+    if (!timer) {
       return NextResponse.json({ skipped: true });
     }
 
@@ -78,8 +77,8 @@ export async function POST(req: Request) {
 
     const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
     const privateKey = process.env.VAPID_PRIVATE_KEY;
-    const subject = process.env.VAPID_SUBJECT || "mailto:marijn.snoeren@gmail.com";
-    if (!publicKey || !privateKey) {
+    const subject = process.env.VAPID_SUBJECT;
+    if (!publicKey || !privateKey || !subject) {
       return NextResponse.json({ error: "VAPID niet ingesteld" }, { status: 500 });
     }
 
@@ -97,6 +96,7 @@ export async function POST(req: Request) {
       title: "Rust voorbij ⚡️",
       body: `Tijd voor je volgende set van ${name}!`,
       url: redirectPath,
+      tag: "rest-over",
     });
 
     let sent = 0;
@@ -126,6 +126,8 @@ export async function POST(req: Request) {
     if (sent === 0 && failed > 0) {
       return NextResponse.json({ error: "Push mislukt" }, { status: 500 });
     }
+
+    await prisma.restTimer.delete({ where: { id: timer.id } }).catch(() => undefined);
 
     return NextResponse.json({ success: true, sent });
   } catch (error) {

@@ -79,9 +79,10 @@ export async function POST(req: Request) {
       },
     });
 
-    await prisma.user.update({
-      where: { id: session.user.id },
-      data: { restMessageId: token },
+    await prisma.restTimer.upsert({
+      where: { userId_token: { userId: session.user.id, token } },
+      create: { userId: session.user.id, token },
+      update: {},
     });
 
     const client = new Client({ token: qstashToken });
@@ -125,9 +126,8 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: "Geen timer" }, { status: 400 });
     }
 
-    await prisma.user.updateMany({
-      where: { id: session.user.id, restMessageId: token },
-      data: { restMessageId: null },
+    await prisma.restTimer.deleteMany({
+      where: { userId: session.user.id, token },
     });
 
     return NextResponse.json({ success: true });

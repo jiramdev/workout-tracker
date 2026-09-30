@@ -1,11 +1,13 @@
 "use server";
 
+import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { refreshUserCache } from "@/lib/queries";
 import { revalidateTabs } from "@/lib/revalidate-tabs";
 import bcrypt from "bcryptjs";
+import { passwordRuleError } from "@/lib/password";
 
 export interface AccountInput {
   name: string;
@@ -24,7 +26,7 @@ function parseOptionalNumber(value: string) {
   return parsed;
 }
 
-export async function updateAccount(input: AccountInput) {
+export async function updateAccount(input: AccountInput, currentPassword = "") {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) throw new Error("Niet ingelogd");
 
@@ -50,6 +52,21 @@ export async function updateAccount(input: AccountInput) {
 
   const sex = input.sex === "man" || input.sex === "vrouw" || input.sex === "anders" ? input.sex : null;
 
+  const currentUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { email: true, passwordHash: true },
+  });
+  if (!currentUser) return { error: "Account niet gevonden." };
+
+  const emailChanged = email !== currentUser.email;
+  if (emailChanged) {
+    if (!currentPassword) {
+      return { error: "Vul je huidige wachtwoord in om je e-mail te wijzigen." };
+    }
+    const matches = await bcrypt.compare(currentPassword, currentUser.passwordHash);
+    if (!matches) return { error: "Huidig wachtwoord klopt niet." };
+  }
+
   const existing = await prisma.user.findUnique({
     where: { email },
     select: { id: true },
@@ -58,16 +75,24 @@ export async function updateAccount(input: AccountInput) {
     return { error: "Dit e-mailadres is al in gebruik." };
   }
 
-  await prisma.user.update({
-    where: { id: session.user.id },
-    data: {
-      name,
-      email,
-      age: age === null ? null : Math.round(age),
-      heightCm,
-      sex,
-    },
-  });
+  try {
+    await prisma.user.update({
+      where: { id: session.user.id },
+      data: {
+        name,
+        email,
+        age: age === null ? null : Math.round(age),
+        heightCm,
+        sex,
+        ...(emailChanged ? { sessionVersion: { increment: 1 } } : {}),
+      },
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return { error: "Dit e-mailadres is al in gebruik." };
+    }
+    throw error;
+  }
 
   if (weight !== null) {
     const latest = await prisma.bodyWeightLog.findFirst({
@@ -84,7 +109,7 @@ export async function updateAccount(input: AccountInput) {
 
   refreshUserCache(session.user.id);
   revalidateTabs();
-  return { success: true };
+  return { success: true, emailChanged };
 }
 
 export async function updatePassword(currentPassword: string, nextPassword: string) {
@@ -94,9 +119,8 @@ export async function updatePassword(currentPassword: string, nextPassword: stri
   if (!currentPassword || !nextPassword) {
     return { error: "Vul je huidige en nieuwe wachtwoord in." };
   }
-  if (nextPassword.length < 8) {
-    return { error: "Het nieuwe wachtwoord moet minstens 8 tekens zijn." };
-  }
+  const tooShort = passwordRuleError(nextPassword, "Het nieuwe wachtwoord");
+  if (tooShort) return { error: tooShort };
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
@@ -110,7 +134,7 @@ export async function updatePassword(currentPassword: string, nextPassword: stri
   const passwordHash = await bcrypt.hash(nextPassword, 12);
   await prisma.user.update({
     where: { id: session.user.id },
-    data: { passwordHash },
+    data: { passwordHash, sessionVersion: { increment: 1 } },
   });
 
   return { success: true };

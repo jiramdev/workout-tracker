@@ -1,36 +1,50 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# repiq
 
-## Getting Started
+Personal workout tracker. Next.js app with Prisma, Postgres, and next-auth.
 
-First, run the development server:
+## Setup
 
 ```bash
+npm install
+cp .env.example .env
+npx prisma migrate deploy
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`npm run build` runs `prisma generate` and `next build`. It does not apply database migrations.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Environment
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Copy `.env.example`. Every variable except `VERCEL_AUTOMATION_BYPASS_SECRET` is required in production.
 
-## Learn More
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` | Postgres connection string |
+| `NEXTAUTH_SECRET` | Signs the session JWT |
+| `NEXTAUTH_URL` | Public origin next-auth uses for callbacks |
+| `APP_URL` | Origin used to schedule rest-timer callbacks |
+| `CRON_SECRET` | Bearer token for the morning notification cron |
+| `QSTASH_TOKEN` | Publishes delayed rest-timer jobs |
+| `QSTASH_CURRENT_SIGNING_KEY` | Verifies QStash signatures |
+| `QSTASH_NEXT_SIGNING_KEY` | Verifies the next QStash signing key |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | Browser push subscription key |
+| `VAPID_PRIVATE_KEY` | Signs web push messages |
+| `VAPID_SUBJECT` | `mailto:` contact required by web push. No default is built in |
+| `VERCEL_AUTOMATION_BYPASS_SECRET` | Lets QStash reach a deployment protected by Vercel Authentication |
 
-To learn more about Next.js, take a look at the following resources:
+## Migrations on the existing production database
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+The production database was created with `prisma db push`, so it has the tables but no `_prisma_migrations` history. Do not let the baseline migration create those tables again.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Before the release that contains `prisma/migrations/20260930180000_review_fixes` starts serving traffic, run this once against the production `DATABASE_URL`:
 
-## Deploy on Vercel
+```bash
+npx prisma migrate resolve --applied 20260929120000_baseline
+npx prisma migrate deploy
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+`migrate resolve` records the baseline as already applied and does not execute it. `migrate deploy` then runs only the review migration. That migration adds `User.sessionVersion`, replaces `User.restMessageId` with a `RestTimer` row per device, adds the listed indexes, and deletes duplicate plan placements and notifications before creating the unique indexes.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+A brand-new database can skip `migrate resolve` and run `npx prisma migrate deploy` only.
+
+Vercel does not run either command during the build.

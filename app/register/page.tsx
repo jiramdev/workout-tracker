@@ -93,8 +93,9 @@ export default function RegisterPage() {
               type="password"
               name="password"
               required
+              minLength={8}
               autoComplete="new-password"
-              placeholder="••••••••"
+              placeholder="minstens 8 tekens"
               className={fieldClass}
             />
           </label>

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { updateAccount, updatePassword, type AccountInput } from "./actions";
+import { clearWorkoutDraft } from "@/lib/workout-draft";
 
 const SEX_OPTIONS = [
   { value: "man", label: "Man" },
@@ -21,10 +22,11 @@ export default function AccountForm({ initial }: { initial: AccountInput }) {
   const [profileSaved, setProfileSaved] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
 
+  const [emailPassword, setEmailPassword] = useState("");
+  const emailChanged = profile.email.trim().toLowerCase() !== initial.email.trim().toLowerCase();
   const [currentPassword, setCurrentPassword] = useState("");
   const [nextPassword, setNextPassword] = useState("");
   const [passwordError, setPasswordError] = useState<string | null>(null);
-  const [passwordSaved, setPasswordSaved] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
 
   function updateField(field: keyof AccountInput, value: string) {
@@ -37,12 +39,18 @@ export default function AccountForm({ initial }: { initial: AccountInput }) {
     setSavingProfile(true);
     setProfileError(null);
     setProfileSaved(false);
-    const result = await updateAccount(profile);
+    const result = await updateAccount(profile, emailPassword);
     setSavingProfile(false);
     if (result?.error) {
       setProfileError(result.error);
       return;
     }
+    if (result?.emailChanged) {
+      await clearWorkoutDraft();
+      await signOut({ callbackUrl: "/login" });
+      return;
+    }
+    setEmailPassword("");
     setProfileSaved(true);
     router.refresh();
   }
@@ -51,7 +59,6 @@ export default function AccountForm({ initial }: { initial: AccountInput }) {
     e.preventDefault();
     setSavingPassword(true);
     setPasswordError(null);
-    setPasswordSaved(false);
     const result = await updatePassword(currentPassword, nextPassword);
     setSavingPassword(false);
     if (result?.error) {
@@ -60,7 +67,8 @@ export default function AccountForm({ initial }: { initial: AccountInput }) {
     }
     setCurrentPassword("");
     setNextPassword("");
-    setPasswordSaved(true);
+    await clearWorkoutDraft();
+    await signOut({ callbackUrl: "/login" });
   }
 
   return (
@@ -104,6 +112,24 @@ export default function AccountForm({ initial }: { initial: AccountInput }) {
             className={fieldClass}
           />
         </label>
+
+        {emailChanged && (
+          <label className="block space-y-1.5">
+            <span className="px-1 text-[11px] font-semibold tracking-wider text-[#71717a] uppercase">
+              Huidig wachtwoord
+            </span>
+            <input
+              type="password"
+              value={emailPassword}
+              onChange={(e) => setEmailPassword(e.target.value)}
+              autoComplete="current-password"
+              className={fieldClass}
+            />
+            <span className="px-1 block text-[12px] text-[#a1a1aa]">
+              Nodig om je e-mail te wijzigen. Je wordt daarna uitgelogd.
+            </span>
+          </label>
+        )}
 
         <div className="grid grid-cols-2 gap-3">
           <label className="block space-y-1.5">
@@ -210,10 +236,7 @@ export default function AccountForm({ initial }: { initial: AccountInput }) {
           <input
             type="password"
             value={currentPassword}
-            onChange={(e) => {
-              setCurrentPassword(e.target.value);
-              setPasswordSaved(false);
-            }}
+            onChange={(e) => setCurrentPassword(e.target.value)}
             autoComplete="current-password"
             className={fieldClass}
           />
@@ -226,10 +249,7 @@ export default function AccountForm({ initial }: { initial: AccountInput }) {
           <input
             type="password"
             value={nextPassword}
-            onChange={(e) => {
-              setNextPassword(e.target.value);
-              setPasswordSaved(false);
-            }}
+            onChange={(e) => setNextPassword(e.target.value)}
             autoComplete="new-password"
             className={fieldClass}
           />
@@ -238,9 +258,9 @@ export default function AccountForm({ initial }: { initial: AccountInput }) {
         {passwordError && (
           <p className="px-1 text-[13px] text-red-300">{passwordError}</p>
         )}
-        {passwordSaved && (
-          <p className="px-1 text-[13px] text-[#baa3d0]">Wachtwoord bijgewerkt</p>
-        )}
+        <p className="px-1 text-[12px] text-[#a1a1aa]">
+          Na een wijziging word je op dit apparaat en op andere sessies uitgelogd.
+        </p>
 
         <button
           type="submit"
@@ -253,7 +273,10 @@ export default function AccountForm({ initial }: { initial: AccountInput }) {
 
       <button
         type="button"
-        onClick={() => signOut({ callbackUrl: "/login" })}
+        onClick={async () => {
+          await clearWorkoutDraft();
+          await signOut({ callbackUrl: "/login" });
+        }}
         className="w-full text-[13px] font-semibold tracking-wider text-[#71717a] uppercase py-3 apple-press"
       >
         Uitloggen

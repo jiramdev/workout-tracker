@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { unstable_cache, updateTag } from "next/cache";
 import prisma from "@/lib/prisma";
 import { amsterdamParts, amsterdamStartOfMonth } from "@/lib/amsterdam";
@@ -141,15 +142,34 @@ export function getActiveWorkout(userId: string, planId?: string) {
       .map((exercise) => exercise.exerciseId)
       .filter((id): id is string => Boolean(id));
 
-    const history =
+    const latest =
       exerciseIds.length === 0
+        ? []
+        : await prisma.$queryRaw<Array<{ exerciseId: string; workoutLogId: string }>>(
+            Prisma.sql`
+              SELECT DISTINCT ON (le."exerciseId")
+                le."exerciseId" AS "exerciseId",
+                le."workoutLogId" AS "workoutLogId"
+              FROM "LogEntry" le
+              INNER JOIN "WorkoutLog" wl ON wl."id" = le."workoutLogId"
+              WHERE le."exerciseId" IN (${Prisma.join(exerciseIds)})
+                AND wl."userId" = ${userId}
+                AND wl."completedAt" IS NOT NULL
+              ORDER BY le."exerciseId", wl."completedAt" DESC
+            `
+          );
+
+    const history =
+      latest.length === 0
         ? []
         : await prisma.logEntry.findMany({
             where: {
-              exerciseId: { in: exerciseIds },
-              workoutLog: { userId, completedAt: { not: null } },
+              OR: latest.map((row) => ({
+                exerciseId: row.exerciseId,
+                workoutLogId: row.workoutLogId,
+              })),
             },
-            orderBy: [{ workoutLog: { completedAt: "desc" } }, { setNumber: "asc" }],
+            orderBy: { setNumber: "asc" },
             select: {
               exerciseId: true,
               setNumber: true,
@@ -160,13 +180,9 @@ export function getActiveWorkout(userId: string, planId?: string) {
             },
           });
 
-    const latestLog = new Map<string, string>();
     const setsByExercise = new Map<string, { weight: number; reps: number; durationSeconds: number | null }[]>();
     for (const entry of history) {
       if (!entry.exerciseId) continue;
-      const chosen = latestLog.get(entry.exerciseId);
-      if (!chosen) latestLog.set(entry.exerciseId, entry.workoutLogId);
-      else if (chosen !== entry.workoutLogId) continue;
       const sets = setsByExercise.get(entry.exerciseId) ?? [];
       sets[entry.setNumber - 1] = {
         weight: entry.weight,
@@ -198,7 +214,8 @@ export function getAnalytics(userId: string) {
               exerciseName: true,
               weight: true,
               reps: true,
-              exercise: { select: { name: true } },
+              durationSeconds: true,
+              exercise: { select: { name: true, tracking: true } },
             },
           },
         },
@@ -218,6 +235,8 @@ export function getAnalytics(userId: string) {
           exerciseName: entry.exercise?.name || entry.exerciseName,
           weight: entry.weight,
           reps: entry.reps,
+          durationSeconds: entry.durationSeconds,
+          tracking: asTracking(entry.exercise?.tracking),
         })),
       })),
       weightLogs: weightLogs.map((log) => ({

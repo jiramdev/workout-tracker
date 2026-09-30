@@ -1,12 +1,18 @@
-// app/workout/active/ActiveWorkoutLogger.tsx
 "use client";
 
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { Check, X } from "lucide-react";
 import { motion } from "motion/react";
 import { popTransition } from "@/lib/motion";
 import { finishWorkout } from "./actions";
+import {
+  draftKey,
+  migrateLegacyDraft,
+  setsDraftKey,
+  useDraftValue,
+  writeDraft,
+} from "@/lib/workout-draft";
 
 interface Exercise {
   id: string;
@@ -24,6 +30,7 @@ interface PreviousSet {
 }
 
 interface ActiveWorkoutLoggerProps {
+  userId: string;
   planId?: string | null;
   exercises: Exercise[];
   previousSets: Record<string, PreviousSet[]>;
@@ -37,12 +44,8 @@ interface SetRow {
   isCompleted: boolean;
 }
 
-const STORAGE_TARGET_KEY = "active_workout_rest_target";
-const STORAGE_EXERCISE_KEY = "active_workout_rest_exercise";
-const STORAGE_REST_TOKEN_KEY = "active_workout_rest_token";
-const STORAGE_SETS_KEY = "active_workout_sets_data_v2";
-const STORAGE_START_KEY = "active_workout_started_at";
 const EMPTY_ROWS: SetRow[] = [];
+const emptyCache = new Map<string, Record<string, SetRow[]>>();
 
 function urlBase64ToUint8Array(base64String: string) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -55,17 +58,61 @@ function urlBase64ToUint8Array(base64String: string) {
   return outputArray;
 }
 
-function readRestTarget() {
-  if (typeof window === "undefined") return null;
-  const stored = localStorage.getItem(STORAGE_TARGET_KEY);
-  if (!stored) return null;
-  const target = parseInt(stored, 10);
-  if (!target || target <= Date.now()) {
-    localStorage.removeItem(STORAGE_TARGET_KEY);
-    localStorage.removeItem(STORAGE_EXERCISE_KEY);
-    return null;
+function emptySets(exercises: Exercise[]): Record<string, SetRow[]> {
+  const initial: Record<string, SetRow[]> = {};
+  for (const ex of exercises) {
+    initial[ex.name] = Array.from({ length: ex.targetSets || 3 }, (_, idx) => ({
+      setNumber: idx + 1,
+      weight: "",
+      reps: "",
+      duration: "",
+      isCompleted: false,
+    }));
   }
+  return initial;
+}
+
+function cachedEmpty(exercises: Exercise[]) {
+  const signature = exercises.map((exercise) => `${exercise.id}:${exercise.targetSets}`).join("|");
+  const hit = emptyCache.get(signature);
+  if (hit) return hit;
+  const value = emptySets(exercises);
+  emptyCache.set(signature, value);
+  return value;
+}
+
+function parseSets(raw: string | null, exercises: Exercise[]) {
+  if (!raw) return cachedEmpty(exercises);
+  try {
+    const parsed = JSON.parse(raw) as Record<string, SetRow[]>;
+    for (const rows of Object.values(parsed)) {
+      if (!Array.isArray(rows)) return cachedEmpty(exercises);
+      for (const row of rows) row.duration = row.duration ?? "";
+    }
+    return parsed;
+  } catch (error) {
+    console.error("Fout bij uitlezen sets cache:", error);
+    return cachedEmpty(exercises);
+  }
+}
+
+function parseTarget(raw: string | null) {
+  if (!raw) return null;
+  const target = parseInt(raw, 10);
+  if (!target || target <= Date.now()) return null;
   return target;
+}
+
+function useReducedMotion() {
+  return useSyncExternalStore(
+    (onChange) => {
+      const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+      media.addEventListener("change", onChange);
+      return () => media.removeEventListener("change", onChange);
+    },
+    () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    () => false
+  );
 }
 
 function RestTimer({
@@ -77,16 +124,16 @@ function RestTimer({
   onCancel: () => void;
   onExpire: () => void;
 }) {
+  const reduce = useReducedMotion();
   const [secondsRemaining, setSecondsRemaining] = useState<number | null>(null);
   const onExpireRef = useRef(onExpire);
-  onExpireRef.current = onExpire;
 
   useEffect(() => {
-    if (target == null) {
-      setSecondsRemaining(null);
-      return;
-    }
+    onExpireRef.current = onExpire;
+  }, [onExpire]);
 
+  useEffect(() => {
+    if (target == null) return;
     let stopped = false;
     const tick = () => {
       const remaining = Math.max(0, Math.ceil((target - Date.now()) / 1000));
@@ -100,46 +147,58 @@ function RestTimer({
       }
       setSecondsRemaining((current) => (current === remaining ? current : remaining));
     };
-
-    tick();
-    const interval = setInterval(tick, 1000);
+    const kick = window.setTimeout(tick, 0);
+    const interval = window.setInterval(tick, 1000);
     const onVisible = () => {
       if (document.visibilityState === "visible") tick();
     };
     window.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", tick);
-
     return () => {
-      clearInterval(interval);
+      window.clearTimeout(kick);
+      window.clearInterval(interval);
       window.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", tick);
     };
   }, [target]);
 
-  if (secondsRemaining == null) return null;
+  if (target == null || secondsRemaining == null) return null;
+
+  const body = (
+    <>
+      <button
+        type="button"
+        onClick={onCancel}
+        aria-label="Timer stoppen"
+        className="absolute top-3 right-3 w-9 h-9 rounded-full bg-white/[0.06] text-[#a1a1aa] flex items-center justify-center apple-press"
+      >
+        <X className="w-4 h-4 stroke-[2.5]" />
+      </button>
+      <p className="text-[12px] font-semibold tracking-[0.22em] text-[#baa3d0] uppercase">Rust</p>
+      <p className="mt-2 font-editorial text-[92px] leading-none tracking-tight text-white">
+        {Math.floor(secondsRemaining / 60)}:{(secondsRemaining % 60).toString().padStart(2, "0")}
+      </p>
+    </>
+  );
+
+  const frameClass =
+    "pointer-events-auto relative mx-auto max-w-sm bg-[#141416] border border-[#baa3d0]/50 rounded-[34px] px-6 py-7 text-center shadow-[0_24px_60px_rgba(0,0,0,0.55)]";
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: -12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={popTransition}
-      className="fixed top-3 left-0 right-0 z-[70] px-4 pointer-events-none"
-    >
-      <div className="pointer-events-auto relative mx-auto max-w-sm bg-[#141416] border border-[#baa3d0]/50 rounded-[34px] px-6 py-7 text-center shadow-[0_24px_60px_rgba(0,0,0,0.55)]">
-        <button
-          type="button"
-          onClick={onCancel}
-          aria-label="Timer stoppen"
-          className="absolute top-3 right-3 w-9 h-9 rounded-full bg-white/[0.06] text-[#a1a1aa] flex items-center justify-center apple-press"
+    <div className="fixed top-3 left-0 right-0 z-[70] px-4 pointer-events-none">
+      {reduce ? (
+        <div className={frameClass}>{body}</div>
+      ) : (
+        <motion.div
+          initial={{ opacity: 0, y: -12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={popTransition}
+          className={frameClass}
         >
-          <X className="w-4 h-4 stroke-[2.5]" />
-        </button>
-        <p className="text-[12px] font-semibold tracking-[0.22em] text-[#baa3d0] uppercase">Rust</p>
-        <p className="mt-2 font-editorial text-[92px] leading-none tracking-tight text-white">
-          {Math.floor(secondsRemaining / 60)}:{(secondsRemaining % 60).toString().padStart(2, "0")}
-        </p>
-      </div>
-    </motion.div>
+          {body}
+        </motion.div>
+      )}
+    </div>
   );
 }
 
@@ -181,7 +240,7 @@ const ExerciseSection = memo(function ExerciseSection({
         <span>#</span>
         {tracking === "weight" && <span>KG</span>}
         <span>{tracking === "hold" ? "SEC" : "REPS"}</span>
-        <span></span>
+        <span className="sr-only">Afgevinkt</span>
       </div>
 
       <div className="space-y-2">
@@ -206,6 +265,7 @@ const ExerciseSection = memo(function ExerciseSection({
                 <input
                   type="number"
                   inputMode="decimal"
+                  aria-label={`Set ${row.setNumber} gewicht in kilo`}
                   placeholder={previous ? String(previous.weight) : "—"}
                   value={row.weight}
                   disabled={isDone}
@@ -217,6 +277,11 @@ const ExerciseSection = memo(function ExerciseSection({
               <input
                 type="number"
                 inputMode="numeric"
+                aria-label={
+                  tracking === "hold"
+                    ? `Set ${row.setNumber} seconden`
+                    : `Set ${row.setNumber} herhalingen`
+                }
                 placeholder={
                   tracking === "hold"
                     ? previous?.durationSeconds
@@ -236,6 +301,8 @@ const ExerciseSection = memo(function ExerciseSection({
 
               <button
                 type="button"
+                aria-pressed={isDone}
+                aria-label={isDone ? `Set ${row.setNumber} afgevinkt` : `Set ${row.setNumber} afvinken`}
                 onClick={() => onToggle(exercise.name, idx, restDuration)}
                 className={`w-9 h-9 rounded-full flex items-center justify-center transition apple-press ${
                   isDone
@@ -253,40 +320,6 @@ const ExerciseSection = memo(function ExerciseSection({
   );
 });
 
-function setsStorageKey(planId?: string | null) {
-  return `${STORAGE_SETS_KEY}:${planId ?? "none"}`;
-}
-
-function emptySets(exercises: Exercise[]): Record<string, SetRow[]> {
-  const initial: Record<string, SetRow[]> = {};
-  for (const ex of exercises) {
-    initial[ex.name] = Array.from({ length: ex.targetSets || 3 }, (_, idx) => ({
-      setNumber: idx + 1,
-      weight: "",
-      reps: "",
-      duration: "",
-      isCompleted: false,
-    }));
-  }
-  return initial;
-}
-
-function readSets(planId: string | null | undefined, exercises: Exercise[]) {
-  if (typeof window === "undefined") return emptySets(exercises);
-  const saved = localStorage.getItem(setsStorageKey(planId));
-  if (!saved) return emptySets(exercises);
-  try {
-    const parsed = JSON.parse(saved) as Record<string, SetRow[]>;
-    for (const rows of Object.values(parsed)) {
-      for (const row of rows) row.duration = row.duration ?? "";
-    }
-    return parsed;
-  } catch (e) {
-    console.error("Fout bij uitlezen sets cache:", e);
-    return emptySets(exercises);
-  }
-}
-
 function loggedNumber(typed: string, previous: number | undefined, asInteger = false) {
   if (typed.trim() === "") return previous ?? 0;
   const parsed = asInteger ? parseInt(typed, 10) : Number(typed);
@@ -294,55 +327,36 @@ function loggedNumber(typed: string, previous: number | undefined, asInteger = f
 }
 
 export default function ActiveWorkoutLogger({
+  userId,
   planId,
   exercises,
   previousSets = {},
 }: ActiveWorkoutLoggerProps) {
   const router = useRouter();
-
-  const [startedAt, setStartedAt] = useState("");
-  const [isFinishing, setIsFinishing] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [restTarget, setRestTarget] = useState<number | null>(null);
-  const setsRef = useRef<Record<string, SetRow[]>>({});
-  const exercisesRef = useRef(exercises);
-  exercisesRef.current = exercises;
-  const skipSave = useRef(true);
+  const setsKey = setsDraftKey(userId, planId);
+  const startKey = draftKey(userId, "started_at");
+  const targetKey = draftKey(userId, "rest_target");
+  const tokenKey = draftKey(userId, "rest_token");
+  const exerciseKey = draftKey(userId, "rest_exercise");
   const pushGen = useRef(0);
+  const [isFinishing, setFinishing] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
-  const [setsData, setSetsData] = useState<Record<string, SetRow[]>>(() => emptySets(exercises));
-
-  setsRef.current = setsData;
-
-  useLayoutEffect(() => {
-    const savedStart = localStorage.getItem(STORAGE_START_KEY);
-    if (savedStart) {
-      setStartedAt(savedStart);
-    } else {
-      const now = new Date().toISOString();
-      localStorage.setItem(STORAGE_START_KEY, now);
-      setStartedAt(now);
-    }
-
-    skipSave.current = true;
-    setSetsData(readSets(planId, exercisesRef.current));
-  }, [planId]);
+  const startedAt = useDraftValue(startKey, (raw) => raw ?? "", "");
+  const setsData = useDraftValue(setsKey, (raw) => parseSets(raw, exercises), cachedEmpty(exercises));
+  const restTarget = useDraftValue(targetKey, parseTarget, null);
 
   useEffect(() => {
-    setRestTarget(readRestTarget());
+    migrateLegacyDraft(userId, planId);
+    if (!localStorage.getItem(startKey)) writeDraft(startKey, new Date().toISOString());
+  }, [userId, planId, startKey]);
+
+  useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
     navigator.serviceWorker.register("/sw.js").catch((err) => {
       console.error("Service worker registreren mislukt:", err);
     });
   }, []);
-
-  useEffect(() => {
-    if (skipSave.current) {
-      skipSave.current = false;
-      return;
-    }
-    localStorage.setItem(setsStorageKey(planId), JSON.stringify(setsData));
-  }, [planId, setsData]);
 
   const cancelRestNotification = useCallback((token: string) => {
     fetch("/api/rest-timer", {
@@ -354,10 +368,10 @@ export default function ActiveWorkoutLogger({
 
   const dismissRestNotification = useCallback(() => {
     pushGen.current += 1;
-    const token = localStorage.getItem(STORAGE_REST_TOKEN_KEY);
-    localStorage.removeItem(STORAGE_REST_TOKEN_KEY);
+    const token = localStorage.getItem(tokenKey);
+    writeDraft(tokenKey, null);
     if (token) cancelRestNotification(token);
-  }, [cancelRestNotification]);
+  }, [cancelRestNotification, tokenKey]);
 
   const scheduleServerPush = useCallback(
     (seconds: number, exerciseName: string) => {
@@ -395,18 +409,17 @@ export default function ActiveWorkoutLogger({
             cancelRestNotification(token);
             return;
           }
-          localStorage.setItem(STORAGE_REST_TOKEN_KEY, token);
+          writeDraft(tokenKey, token);
         })
         .catch((err) => console.error("Achtergrond push plannen mislukt:", err));
     },
-    [cancelRestNotification, planId]
+    [cancelRestNotification, planId, tokenKey]
   );
 
   const clearTimer = useCallback(() => {
-    localStorage.removeItem(STORAGE_TARGET_KEY);
-    localStorage.removeItem(STORAGE_EXERCISE_KEY);
-    setRestTarget(null);
-  }, []);
+    writeDraft(targetKey, null);
+    writeDraft(exerciseKey, null);
+  }, [exerciseKey, targetKey]);
 
   const stopTimer = useCallback(() => {
     dismissRestNotification();
@@ -416,45 +429,37 @@ export default function ActiveWorkoutLogger({
   const startRestTimer = useCallback(
     (seconds: number, exerciseName: string) => {
       const targetTimestamp = Date.now() + seconds * 1000;
-      localStorage.setItem(STORAGE_TARGET_KEY, targetTimestamp.toString());
-      localStorage.setItem(STORAGE_EXERCISE_KEY, exerciseName);
-      setRestTarget(targetTimestamp);
+      writeDraft(targetKey, targetTimestamp.toString());
+      writeDraft(exerciseKey, exerciseName);
       dismissRestNotification();
       scheduleServerPush(seconds, exerciseName);
     },
-    [dismissRestNotification, scheduleServerPush]
+    [dismissRestNotification, exerciseKey, scheduleServerPush, targetKey]
   );
 
   const handleUpdate = useCallback(
     (exerciseName: string, setIndex: number, field: "weight" | "reps" | "duration", value: string) => {
-      setSetsData((prev) => {
-        const rows = prev[exerciseName];
-        if (!rows) return prev;
-        const nextRows = [...rows];
-        nextRows[setIndex] = { ...nextRows[setIndex], [field]: value };
-        return { ...prev, [exerciseName]: nextRows };
-      });
+      const rows = setsData[exerciseName];
+      if (!rows) return;
+      const nextRows = [...rows];
+      nextRows[setIndex] = { ...nextRows[setIndex], [field]: value };
+      writeDraft(setsKey, JSON.stringify({ ...setsData, [exerciseName]: nextRows }));
     },
-    []
+    [setsData, setsKey]
   );
 
   const handleToggleSet = useCallback(
     (exerciseName: string, setIndex: number, restDuration: number = 90) => {
-      const current = setsRef.current[exerciseName]?.[setIndex];
-      if (!current) return;
+      const rows = setsData[exerciseName];
+      const current = rows?.[setIndex];
+      if (!rows || !current) return;
       const nextState = !current.isCompleted;
-
-      setSetsData((prev) => {
-        const rows = prev[exerciseName];
-        if (!rows) return prev;
-        const nextRows = [...rows];
-        nextRows[setIndex] = { ...nextRows[setIndex], isCompleted: nextState };
-        return { ...prev, [exerciseName]: nextRows };
-      });
-
+      const nextRows = [...rows];
+      nextRows[setIndex] = { ...current, isCompleted: nextState };
+      writeDraft(setsKey, JSON.stringify({ ...setsData, [exerciseName]: nextRows }));
       if (nextState) startRestTimer(restDuration, exerciseName);
     },
-    [startRestTimer]
+    [setsData, setsKey, startRestTimer]
   );
 
   const handleFinish = async () => {
@@ -483,43 +488,91 @@ export default function ActiveWorkoutLogger({
       if (!confirm("Nog geen sets afgevinkt. Toch voltooien?")) return;
     }
 
-    setIsFinishing(true);
+    setFinishing(true);
     setSaveError(null);
     try {
       const result = await finishWorkout({ planId, startedAt, sets: completedSets });
       if (!result?.success) {
         setSaveError(result?.error ?? "Opslaan mislukt. Je sets staan nog op dit apparaat.");
-        setIsFinishing(false);
+        setFinishing(false);
         return;
       }
     } catch {
       setSaveError("Opslaan mislukt. Je sets staan nog op dit apparaat.");
-      setIsFinishing(false);
+      setFinishing(false);
       return;
     }
 
     stopTimer();
-    localStorage.removeItem(setsStorageKey(planId));
-    localStorage.removeItem("active_workout_sets_data");
-    localStorage.removeItem(STORAGE_START_KEY);
+    writeDraft(setsKey, null);
+    writeDraft(startKey, null);
     router.push("/");
   };
 
   function handleCancel() {
     if (!confirm("Workout annuleren? Er wordt niets opgeslagen.")) return;
     stopTimer();
-    localStorage.removeItem(setsStorageKey(planId));
-    localStorage.removeItem("active_workout_sets_data");
-    localStorage.removeItem(STORAGE_START_KEY);
+    writeDraft(setsKey, null);
+    writeDraft(startKey, null);
     router.push("/");
   }
 
+  return (
+    <LoggerView
+      exercises={exercises}
+      setsData={setsData}
+      previousSets={previousSets}
+      restTarget={restTarget}
+      saveError={saveError}
+      isFinishing={isFinishing}
+      onCancel={handleCancel}
+      onFinish={handleFinish}
+      onUpdate={handleUpdate}
+      onToggle={handleToggleSet}
+      onStopTimer={stopTimer}
+      onClearTimer={clearTimer}
+    />
+  );
+}
+
+function LoggerView({
+  exercises,
+  setsData,
+  previousSets,
+  restTarget,
+  saveError,
+  isFinishing,
+  onCancel,
+  onFinish,
+  onUpdate,
+  onToggle,
+  onStopTimer,
+  onClearTimer,
+}: {
+  exercises: Exercise[];
+  setsData: Record<string, SetRow[]>;
+  previousSets: Record<string, PreviousSet[]>;
+  restTarget: number | null;
+  saveError: string | null;
+  isFinishing: boolean;
+  onCancel: () => void;
+  onFinish: () => void;
+  onUpdate: (
+    exerciseName: string,
+    setIndex: number,
+    field: "weight" | "reps" | "duration",
+    value: string
+  ) => void;
+  onToggle: (exerciseName: string, setIndex: number, restDuration: number) => void;
+  onStopTimer: () => void;
+  onClearTimer: () => void;
+}) {
   return (
     <div className="space-y-3.5">
       <header className="flex items-center justify-between px-1 py-1">
         <button
           type="button"
-          onClick={handleCancel}
+          onClick={onCancel}
           disabled={isFinishing}
           aria-label="Workout annuleren"
           className="w-10 h-10 rounded-full bg-[#141416] border border-white/[0.08] flex items-center justify-center text-white apple-press shadow-[0_4px_12px_rgba(0,0,0,0.15)] disabled:opacity-50"
@@ -534,7 +587,7 @@ export default function ActiveWorkoutLogger({
         </div>
       </header>
 
-      <RestTimer target={restTarget} onCancel={stopTimer} onExpire={clearTimer} />
+      <RestTimer key={restTarget ?? "off"} target={restTarget} onCancel={onStopTimer} onExpire={onClearTimer} />
 
       {exercises.map((ex) => (
         <ExerciseSection
@@ -542,8 +595,8 @@ export default function ActiveWorkoutLogger({
           exercise={ex}
           rows={setsData[ex.name] ?? EMPTY_ROWS}
           previousSets={previousSets[ex.name]}
-          onUpdate={handleUpdate}
-          onToggle={handleToggleSet}
+          onUpdate={onUpdate}
+          onToggle={onToggle}
         />
       ))}
 
@@ -554,7 +607,7 @@ export default function ActiveWorkoutLogger({
       )}
 
       <button
-        onClick={handleFinish}
+        onClick={onFinish}
         disabled={isFinishing}
         className="w-full bg-[#141416] border border-white/[0.08] rounded-[30px] py-4 text-center transition apple-press shadow-[0_12px_28px_rgba(0,0,0,0.2)] disabled:opacity-50"
       >
