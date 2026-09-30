@@ -2,21 +2,35 @@
 import { NextResponse } from "next/server";
 import webpush from "web-push";
 
-webpush.setVapidDetails(
-  process.env.VAPID_SUBJECT || "mailto:admin@example.com",
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-  process.env.VAPID_PRIVATE_KEY!
-);
+export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   try {
+    const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+    const privateKey = process.env.VAPID_PRIVATE_KEY;
+    const subject = process.env.VAPID_SUBJECT || "mailto:admin@example.com";
+
+    // Als keys ontbreken op de server, geef een nette 200/500 zonder de build te breken
+    if (!publicKey || !privateKey) {
+      console.warn("VAPID keys ontbreken in environment variables.");
+      return NextResponse.json(
+        { error: "VAPID keys niet geconfigureerd" },
+        { status: 500 }
+      );
+    }
+
     const { subscription, delaySeconds, exerciseName } = await req.json();
 
     if (!subscription) {
-      return NextResponse.json({ error: "Geen subscription meegegeven" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Geen subscription meegegeven" },
+        { status: 400 }
+      );
     }
 
-    // Wacht tot de rusttijd voorbij is en stuur dan de push
+    webpush.setVapidDetails(subject, publicKey, privateKey);
+
+    // Voer de delay uit en stuur de push
     setTimeout(async () => {
       const payload = JSON.stringify({
         title: "Rust voorbij ⚡️",
