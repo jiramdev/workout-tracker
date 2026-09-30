@@ -47,8 +47,8 @@ export async function addExerciseToPlan(
     data: {
       planId,
       name: exerciseName.trim(),
-      targetSets: Number(targetSets) || 3,
-      restSeconds: Number(restSeconds) || 90,
+      targetSets: Number.isInteger(Number(targetSets)) && Number(targetSets) >= 1 ? Number(targetSets) : 3,
+      restSeconds: Number.isInteger(Number(restSeconds)) && Number(restSeconds) >= 0 ? Number(restSeconds) : 90,
       order: nextOrder,
     },
   });
@@ -57,6 +57,77 @@ export async function addExerciseToPlan(
   revalidatePath(`/plans/${planId}`);
   revalidatePath("/schedule");
   revalidatePath("/");
+}
+
+export async function updateExercise(
+  planId: string,
+  exerciseId: string,
+  exerciseName: string,
+  targetSets: number,
+  restSeconds: number
+) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) throw new Error("Niet ingelogd");
+
+  const name = exerciseName.trim();
+  const sets = Number(targetSets);
+  const rest = Number(restSeconds);
+  if (!name) return { error: "Vul een naam in." };
+  if (!Number.isInteger(sets) || sets < 1 || sets > 20) {
+    return { error: "Aantal sets moet tussen 1 en 20 liggen." };
+  }
+  if (!Number.isInteger(rest) || rest < 0 || rest > 600) {
+    return { error: "Rusttijd moet tussen 0 en 600 seconden liggen." };
+  }
+
+  const exercise = await prisma.planExercise.findFirst({
+    where: { id: exerciseId, planId, plan: { userId: session.user.id } },
+    select: { id: true },
+  });
+  if (!exercise) return { error: "Oefening niet gevonden." };
+
+  await prisma.planExercise.update({
+    where: { id: exerciseId },
+    data: { name, targetSets: sets, restSeconds: rest },
+  });
+
+  refreshUserCache(session.user.id);
+  revalidatePath(`/plans/${planId}`);
+  revalidatePath("/schedule");
+  revalidatePath("/");
+  return { success: true };
+}
+
+export async function reorderExercises(planId: string, orderedIds: string[]) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) throw new Error("Niet ingelogd");
+
+  const existing = await prisma.planExercise.findMany({
+    where: { planId, plan: { userId: session.user.id } },
+    select: { id: true },
+  });
+  const existingIds = new Set(existing.map((exercise) => exercise.id));
+  if (
+    orderedIds.length !== existing.length ||
+    orderedIds.some((id) => !existingIds.has(id))
+  ) {
+    return { error: "De volgorde kon niet worden opgeslagen." };
+  }
+
+  await prisma.$transaction(
+    orderedIds.map((id, order) =>
+      prisma.planExercise.update({
+        where: { id },
+        data: { order },
+      })
+    )
+  );
+
+  refreshUserCache(session.user.id);
+  revalidatePath(`/plans/${planId}`);
+  revalidatePath("/schedule");
+  revalidatePath("/");
+  return { success: true };
 }
 
 // 3. Oefening verwijderen uit het plan
