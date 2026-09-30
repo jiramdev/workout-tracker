@@ -22,6 +22,7 @@ export default async function ActiveWorkoutPage({ searchParams }: PageProps) {
     id: string;
     name: string;
     targetSets: number;
+    restSeconds: number;
   }> = [];
 
   if (planId) {
@@ -39,11 +40,11 @@ export default async function ActiveWorkoutPage({ searchParams }: PageProps) {
         id: e.id,
         name: e.name,
         targetSets: e.targetSets || 3,
+        restSeconds: e.restSeconds || 90,
       }));
     }
   }
 
-  // Vorige gewichten & reps ophalen voor placeholder/default
   const exerciseNames = exercises.map((e) => e.name);
   const previousEntries = await prisma.logEntry.findMany({
     where: {
@@ -68,7 +69,6 @@ export default async function ActiveWorkoutPage({ searchParams }: PageProps) {
   return (
     <div className="min-h-screen bg-[#baa3d0] text-white pb-32 pt-4 px-4 select-none">
       <main className="max-w-sm mx-auto space-y-3.5">
-        {/* Top Header: Identiek aan analytics & homepage */}
         <header className="flex justify-between items-center px-1 py-1">
           <Link
             href="/"
@@ -85,7 +85,6 @@ export default async function ActiveWorkoutPage({ searchParams }: PageProps) {
           </div>
         </header>
 
-        {/* Minimalistische Logger */}
         <ActiveWorkoutLogger
           planId={planId}
           exercises={exercises}
