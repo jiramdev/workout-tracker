@@ -1,6 +1,16 @@
 import { Trophy } from "lucide-react";
-import AnalyticsChart from "@/app/analytics/AnalyticsChart";
-import { formatAmsterdamDate } from "@/lib/amsterdam";
+import MonthCalendar from "@/components/MonthCalendar";
+
+const TZ = "Europe/Amsterdam";
+
+function dateKey(iso: string) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(iso));
+}
 
 type Workout = {
   completedAt: string;
@@ -17,51 +27,26 @@ export default function AnalyticsPanel({
   weightLogs: WeightLog[];
 }) {
   const totalWorkouts = workouts.length;
-  const strengthChartPoints: Array<{ date: string; value: number }> = [];
-  const exerciseMaxMap = new Map<string, number>();
+  const workoutDates = workouts.map((workout) => dateKey(workout.completedAt));
+  const todayKey = dateKey(new Date().toISOString());
+  const exerciseMaxMap = new Map<string, { weight: number; reps: number }>();
 
   workouts.forEach((workout) => {
-    let sessionBestE1RM = 0;
-
     workout.entries.forEach((entry) => {
       if (entry.weight <= 0) return;
-      const e1rm = entry.reps > 1 ? entry.weight * (1 + entry.reps / 30) : entry.weight;
-      if (e1rm > sessionBestE1RM) sessionBestE1RM = e1rm;
-
       const name = entry.exerciseName || "Oefening";
-      const currentMax = exerciseMaxMap.get(name) || 0;
-      if (entry.weight > currentMax) exerciseMaxMap.set(name, entry.weight);
+      const current = exerciseMaxMap.get(name);
+      if (!current || entry.weight > current.weight || (entry.weight === current.weight && entry.reps > current.reps)) {
+        exerciseMaxMap.set(name, { weight: entry.weight, reps: entry.reps });
+      }
     });
-
-    if (workout.completedAt && sessionBestE1RM > 0) {
-      strengthChartPoints.push({
-        date: formatAmsterdamDate(workout.completedAt),
-        value: Math.round(sessionBestE1RM),
-      });
-    }
   });
 
-  let strengthGainStr = "--";
-  if (strengthChartPoints.length >= 2) {
-    const firstScore = strengthChartPoints[0].value;
-    const lastScore = strengthChartPoints[strengthChartPoints.length - 1].value;
-    if (firstScore > 0) {
-      const gainPercent = Math.round(((lastScore - firstScore) / firstScore) * 100);
-      strengthGainStr = gainPercent >= 0 ? `+${gainPercent}%` : `${gainPercent}%`;
-    }
-  } else if (strengthChartPoints.length === 1) {
-    strengthGainStr = "0%";
-  }
-
   const topPRs = Array.from(exerciseMaxMap.entries())
-    .map(([name, weight]) => ({ name, weight }))
-    .sort((a, b) => b.weight - a.weight)
-    .slice(0, 3);
+    .map(([name, best]) => ({ name, ...best }))
+    .sort((a, b) => b.weight - a.weight || b.reps - a.reps);
 
-  const weightChartPoints = weightLogs.map((log) => ({
-    date: formatAmsterdamDate(log.loggedAt),
-    value: Number(log.weight.toFixed(1)),
-  }));
+  const latestWeight = weightLogs.at(-1)?.weight;
 
   return (
     <div className="min-h-screen bg-[#baa3d0] text-white pb-32 pt-4 px-4 select-none">
@@ -75,9 +60,19 @@ export default function AnalyticsPanel({
           </div>
         </header>
 
-        <AnalyticsChart weightPoints={weightChartPoints} strengthPoints={strengthChartPoints} />
-
         <div className="grid grid-cols-2 gap-3.5">
+          <div className="bg-[#141416] border border-white/[0.08] rounded-[30px] p-5 text-center flex flex-col justify-between items-center aspect-square shadow-[0_12px_28px_rgba(0,0,0,0.2)]">
+            <span className="text-[11px] font-semibold tracking-[0.18em] text-[#baa3d0] uppercase">
+              Gewicht
+            </span>
+            <div className="flex-1 flex items-center justify-center">
+              <span className="text-[48px] font-editorial tracking-tight text-white leading-none block">
+                {latestWeight == null ? "--" : Number(latestWeight.toFixed(1))}
+              </span>
+            </div>
+            <span className="text-[12px] text-[#a1a1aa] font-medium">kilo</span>
+          </div>
+
           <div className="bg-[#141416] border border-white/[0.08] rounded-[30px] p-5 text-center flex flex-col justify-between items-center aspect-square shadow-[0_12px_28px_rgba(0,0,0,0.2)]">
             <span className="text-[11px] font-semibold tracking-[0.18em] text-[#baa3d0] uppercase">
               Sessies
@@ -89,46 +84,41 @@ export default function AnalyticsPanel({
             </div>
             <span className="text-[12px] text-[#a1a1aa] font-medium">voltooid</span>
           </div>
-
-          <div className="bg-[#141416] border border-white/[0.08] rounded-[30px] p-5 text-center flex flex-col justify-between items-center aspect-square shadow-[0_12px_28px_rgba(0,0,0,0.2)]">
-            <span className="text-[11px] font-semibold tracking-[0.18em] text-[#baa3d0] uppercase">
-              Kracht
-            </span>
-            <div className="flex-1 flex items-center justify-center">
-              <span className="text-[48px] font-editorial tracking-tight text-white leading-none block">
-                {strengthGainStr}
-              </span>
-            </div>
-            <span className="text-[12px] text-[#a1a1aa] font-medium">totale winst</span>
-          </div>
         </div>
 
-        {topPRs.length > 0 && (
-          <section className="bg-[#141416] border border-white/[0.08] rounded-[30px] p-5 space-y-3 shadow-[0_12px_28px_rgba(0,0,0,0.2)]">
-            <div className="flex items-center justify-between px-1">
-              <span className="text-[11px] font-semibold tracking-[0.18em] text-[#baa3d0] uppercase">
-                Zwaarste Lifts (PR)
-              </span>
-              <Trophy className="w-3.5 h-3.5 text-[#baa3d0]" />
+        <MonthCalendar workoutDates={workoutDates} todayKey={todayKey} />
+
+        <section className="bg-[#141416] border border-white/[0.08] rounded-[30px] p-5 space-y-3 shadow-[0_12px_28px_rgba(0,0,0,0.2)]">
+          <div className="flex items-center justify-between px-1">
+            <span className="text-[11px] font-semibold tracking-[0.18em] text-[#baa3d0] uppercase">
+              PRs
+            </span>
+            <Trophy className="w-3.5 h-3.5 text-[#baa3d0]" />
+          </div>
+          {topPRs.length === 0 ? (
+            <div className="bg-[#1b1b1e] rounded-2xl px-4 py-3 border border-white/[0.04]">
+              <span className="text-[14px] font-medium text-[#71717a]">Nog geen PRs</span>
             </div>
+          ) : (
             <div className="space-y-2 pt-1">
               {topPRs.map((pr) => (
                 <div
                   key={pr.name}
-                  className="bg-[#1b1b1e] rounded-2xl px-4 py-3 flex items-center justify-between border border-white/[0.04]"
+                  className="bg-[#1b1b1e] rounded-2xl px-4 py-3 flex items-center justify-between gap-3 border border-white/[0.04]"
                 >
-                  <span className="text-[14px] font-medium text-white">{pr.name}</span>
-                  <div className="flex items-baseline gap-1">
+                  <span className="text-[14px] font-medium text-white truncate">{pr.name}</span>
+                  <div className="flex items-baseline gap-1 shrink-0">
                     <span className="font-editorial text-[22px] text-[#baa3d0] tracking-wider leading-none">
                       {pr.weight}
                     </span>
                     <span className="text-[11px] text-[#71717a] font-medium">kg</span>
+                    <span className="text-[11px] text-[#71717a] font-medium">× {pr.reps}</span>
                   </div>
                 </div>
               ))}
             </div>
-          </section>
-        )}
+          )}
+        </section>
       </main>
     </div>
   );
