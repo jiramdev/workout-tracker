@@ -1,8 +1,8 @@
 // app/plans/[id]/PlanEditor.tsx
 "use client";
 
-import { useEffect, useState } from "react";
-import { Plus, Trash2, Check, Edit2, ChevronUp, ChevronDown } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Plus, Trash2, Check, Edit2, GripVertical } from "lucide-react";
 import {
   updatePlanName,
   addExerciseToPlan,
@@ -17,6 +17,17 @@ interface ExerciseItem {
   name: string;
   targetSets?: number;
   restSeconds?: number;
+}
+
+interface DragState {
+  id: string;
+  pointerId: number;
+  startIndex: number;
+  overIndex: number;
+  startY: number;
+  deltaY: number;
+  slot: number;
+  tops: number[];
 }
 
 interface PlanEditorProps {
@@ -34,6 +45,12 @@ export default function PlanEditor({
   const [isEditingTitle, setIsEditingTitle] = useState(false);
 
   const [items, setItems] = useState(exercises);
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  const listRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef(false);
+  const dragRef = useRef<DragState | null>(null);
+  const [drag, setDrag] = useState<DragState | null>(null);
   const [isAddingExercise, setIsAddingExercise] = useState(false);
   const [exerciseName, setExerciseName] = useState("");
   const [targetSets, setTargetSets] = useState("3");
@@ -47,6 +64,7 @@ export default function PlanEditor({
   const [editError, setEditError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (draggingRef.current) return;
     setItems(exercises);
   }, [exercises]);
 
@@ -129,19 +147,86 @@ export default function PlanEditor({
     setEditingId(null);
   };
 
-  const handleMove = async (index: number, direction: -1 | 1) => {
-    const nextIndex = index + direction;
-    if (nextIndex < 0 || nextIndex >= items.length) return;
-    const reordered = [...items];
-    const [moved] = reordered.splice(index, 1);
-    reordered.splice(nextIndex, 0, moved);
+  function startDrag(event: React.PointerEvent<HTMLButtonElement>, index: number) {
+    if (event.button !== 0 || items.length < 2) return;
+    const list = listRef.current;
+    if (!list) return;
+    const rows = [...list.querySelectorAll<HTMLElement>("[data-exercise-id]")];
+    const listTop = list.getBoundingClientRect().top;
+    const tops = rows.map((row) => row.getBoundingClientRect().top - listTop);
+    const slot =
+      tops[index + 1] != null
+        ? tops[index + 1] - tops[index]
+        : tops[index] - (tops[index - 1] ?? tops[index]);
+
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const next: DragState = {
+      id: items[index].id,
+      pointerId: event.pointerId,
+      startIndex: index,
+      overIndex: index,
+      startY: event.clientY,
+      deltaY: 0,
+      slot,
+      tops,
+    };
+    draggingRef.current = true;
+    dragRef.current = next;
+    setDrag(next);
+  }
+
+  function moveDrag(event: React.PointerEvent<HTMLButtonElement>) {
+    const current = dragRef.current;
+    if (!current || event.pointerId !== current.pointerId || !listRef.current) return;
+    const y = event.clientY - listRef.current.getBoundingClientRect().top;
+    let overIndex = current.tops.length - 1;
+    for (let i = 0; i < current.tops.length; i++) {
+      const mid =
+        i < current.tops.length - 1
+          ? (current.tops[i] + current.tops[i + 1]) / 2
+          : current.tops[i] + current.slot / 2;
+      if (y < mid) {
+        overIndex = i;
+        break;
+      }
+    }
+    const next = { ...current, overIndex, deltaY: event.clientY - current.startY };
+    dragRef.current = next;
+    setDrag(next);
+  }
+
+  async function endDrag(event: React.PointerEvent<HTMLButtonElement>) {
+    const current = dragRef.current;
+    if (!current || event.pointerId !== current.pointerId) return;
+    dragRef.current = null;
+    draggingRef.current = false;
+    setDrag(null);
+    if (current.startIndex === current.overIndex) return;
+
+    const reordered = [...itemsRef.current];
+    const [moved] = reordered.splice(current.startIndex, 1);
+    reordered.splice(current.overIndex, 0, moved);
+    itemsRef.current = reordered;
     setItems(reordered);
     const result = await reorderExercises(
       planId,
       reordered.map((exercise) => exercise.id)
     );
-    if (result?.error) setItems(items);
-  };
+    if (result?.error) setItems(exercises);
+  }
+
+  function dragShift(index: number) {
+    if (!drag) return 0;
+    if (index === drag.startIndex) return drag.deltaY;
+    if (drag.overIndex > drag.startIndex && index > drag.startIndex && index <= drag.overIndex) {
+      return -drag.slot;
+    }
+    if (drag.overIndex < drag.startIndex && index < drag.startIndex && index >= drag.overIndex) {
+      return drag.slot;
+    }
+    return 0;
+  }
 
   const handleDeleteExercise = async (exerciseId: string) => {
     setItems((current) => current.filter((exercise) => exercise.id !== exerciseId));
@@ -282,7 +367,7 @@ export default function PlanEditor({
         )}
 
         {/* Oefeningen in dit plan */}
-        <div className="space-y-2 pt-1">
+        <div ref={listRef} className="space-y-2 pt-1">
           {items.length === 0 ? (
             <div className="py-8 text-center text-[#71717a] text-[13px]">
               Nog geen oefeningen toegevoegd aan dit plan.
@@ -291,7 +376,20 @@ export default function PlanEditor({
             items.map((ex, idx) => (
               <div
                 key={ex.id}
-                className="bg-[#1b1b1e] border border-white/[0.04] rounded-2xl px-3 py-3"
+                data-exercise-id={ex.id}
+                className={`bg-[#1b1b1e] border border-white/[0.04] rounded-2xl px-3 py-3 ${
+                  drag?.id === ex.id ? "shadow-[0_16px_32px_rgba(0,0,0,0.45)]" : ""
+                }`}
+                style={
+                  drag
+                    ? {
+                        position: "relative",
+                        zIndex: drag.id === ex.id ? 20 : 1,
+                        transform: `translateY(${dragShift(idx)}px)`,
+                        transition: drag.id === ex.id ? "none" : "transform 160ms ease",
+                      }
+                    : undefined
+                }
               >
                 {editingId === ex.id ? (
                   <form onSubmit={handleSaveExercise} className="space-y-3">
@@ -347,26 +445,17 @@ export default function PlanEditor({
                   </form>
                 ) : (
                   <div className="flex items-center gap-2">
-                    <div className="flex flex-col">
-                      <button
-                        type="button"
-                        aria-label="Omhoog"
-                        disabled={idx === 0}
-                        onClick={() => handleMove(idx, -1)}
-                        className="w-7 h-6 flex items-center justify-center text-[#71717a] disabled:opacity-25 hover:text-white"
-                      >
-                        <ChevronUp className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        aria-label="Omlaag"
-                        disabled={idx === items.length - 1}
-                        onClick={() => handleMove(idx, 1)}
-                        className="w-7 h-6 flex items-center justify-center text-[#71717a] disabled:opacity-25 hover:text-white"
-                      >
-                        <ChevronDown className="w-4 h-4" />
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      aria-label="Versleep om te herschikken"
+                      onPointerDown={(event) => startDrag(event, idx)}
+                      onPointerMove={moveDrag}
+                      onPointerUp={endDrag}
+                      onPointerCancel={endDrag}
+                      className="w-8 h-10 flex items-center justify-center text-[#71717a] touch-none cursor-grab active:cursor-grabbing"
+                    >
+                      <GripVertical className="w-4 h-4" />
+                    </button>
                     <span className="w-6 h-6 rounded-full bg-[#242429] text-[11px] font-bold text-[#baa3d0] flex items-center justify-center shrink-0">
                       {idx + 1}
                     </span>
